@@ -20,6 +20,10 @@ export function criarUsuario({ nome, email, senha, papel }) {
   return r.lastInsertRowid;
 }
 
+export function trocarSenha(usuarioId, senha) {
+  rodar(`UPDATE usuarios SET senha_hash = ? WHERE id = ?`, bcrypt.hashSync(senha, 10), usuarioId);
+}
+
 export function entrar(email, senha) {
   const u = buscar(
     `SELECT * FROM usuarios WHERE email = ? AND ativo = 1`,

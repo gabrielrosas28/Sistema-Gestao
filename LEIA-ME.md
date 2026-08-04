@@ -86,12 +86,23 @@ PC servidor. Sem isso, o endereço pode mudar quando o PC reiniciar.
 
 ---
 
-## Deixar ligando junto com o Windows
+## Tirar a janela preta do caminho
 
-1. Aperte `Windows + R`, digite `shell:startup` e dê Enter.
-2. Arraste o `Gestao.bat` para essa pasta (segurando `Alt` para criar um atalho).
+Enquanto o sistema roda pelo `Gestao.bat`, ele só fica no ar com aquela janela
+aberta. Qualquer pessoa que a feche sem querer derruba o sistema para a escola
+inteira.
 
-Da próxima vez que o PC ligar, o sistema sobe sozinho.
+Clique com o botão direito em **`Rodar sem janela.bat`** e escolha
+**Executar como administrador**. Ele registra o sistema no Windows para:
+
+- subir sozinho quando o PC liga, antes de alguém fazer login
+- rodar escondido, sem janela para fechar por engano
+- voltar sozinho se travar
+
+O que apareceria na janela passa a ser gravado em `dados\servidor.log`.
+
+O mesmo arquivo desliga esse modo (opção 2), o que você precisa fazer antes de
+rodar o `Atualizar.bat` — e religar depois.
 
 ---
 
@@ -158,6 +169,35 @@ Isso evita esconder dinheiro que entrou de verdade.
 
 ---
 
+## Atualizar a lista de alunos
+
+Sempre que a secretaria exportar uma lista nova do sistema da escola:
+
+```
+npm run importar -- "C:\caminho\Exportado.CSV"
+```
+
+Pode rodar quantas vezes quiser. Ele cria quem chegou, atualiza quem já existe
+e **move quem trocou de turma** — o pagamento acompanha o aluno, porque está
+preso à pessoa e não à turma.
+
+**Ninguém é apagado nem desativado.** Quem está no sistema e não veio no
+arquivo aparece listado no final para você conferir. Se tiver certeza de que
+o arquivo é a escola inteira e quer tirar todos de uma vez:
+
+```
+npm run importar -- "C:\caminho\Exportado.CSV" --desativar-ausentes
+```
+
+Aluno desativado some das listas, mas o histórico de pagamento dele fica
+guardado.
+
+O arquivo precisa ter as colunas **MATRICULA, NOME, CURSO e TURMA**. A planilha
+`.xlsx` do gerador de boletins também continua funcionando, só que ela cobre
+apenas do 2º ao 5º ano.
+
+---
+
 ## Quem pode o quê
 
 | Ação | Secretaria | Coordenação |
@@ -166,10 +206,14 @@ Isso evita esconder dinheiro que entrou de verdade.
 | Marcar quem participa | sim | sim |
 | Isentar aluno do pagamento | sim | sim |
 | Ver e exportar relatórios | sim | sim |
-| Criar evento e definir valor | não | sim |
+| Criar, editar e cancelar evento | não | sim |
 | Fechar e reabrir turma | não | sim |
+| Editar o calendário letivo | não | sim |
 | Cadastrar quem usa o sistema | não | sim |
 | Ver o histórico de alterações | não | sim |
+
+Quem é da coordenação tem a aba **Ajustes** no menu, com o cadastro de pessoas
+e o calendário letivo. A secretaria não enxerga essa aba.
 
 Toda ação que mexe em dinheiro fica registrada com nome, data e hora. Pagamento
 estornado **não é apagado**: fica marcado como estornado, com o motivo. Por isso
@@ -182,7 +226,7 @@ um relatório emitido mês passado continua batendo com o que foi impresso na é
 | Comando | O que faz |
 |---|---|
 | `npm start` | Liga o sistema |
-| `npm run importar` | Atualiza turmas e alunos a partir da planilha |
+| `npm run importar -- "caminho\Exportado.CSV"` | Atualiza turmas e alunos |
 | `npm run criar-usuario` | Cadastra alguém pela linha de comando |
 | `npm run backup` | Faz uma cópia do banco |
 | `npm run testar` | Confere se as regras de pagamento estão de pé (com o sistema ligado) |

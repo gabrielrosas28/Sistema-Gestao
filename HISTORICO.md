@@ -11,6 +11,57 @@ Formato `maior.menor.correção`:
 
 ---
 
+## 1.3.0 — 4 de agosto de 2026
+
+**Importar a escola inteira**
+
+O `Exportado.CSV` do sistema da escola agora entra direto, com as 39 turmas
+e os 637 alunos do Maternalzinho ao 5º ano.
+
+- Lê o arquivo em Latin-1, que é como o sistema exporta, sem estragar acento
+- Monta o código da turma juntando as colunas CURSO e TURMA
+  (`MATERNAL II` + `C` vira `M2C`; `3º ANO / ENSINO FUNDAMENTAL` + `A` vira `3A`)
+- Turma que ainda não existia é criada, em vez de o aluno sumir
+- Aluno que mudou de turma é movido, levando o histórico de pagamento junto
+- Gênero vindo da planilha de boletins é preservado, não apagado
+- Quem está no sistema e não veio no arquivo continua ativo e é listado no
+  fim; para desativar todos de uma vez, use `--desativar-ausentes`
+- Turma que ficou sem nenhum aluno é desativada e volta sozinha depois
+- A planilha `.xlsx` do gerador de boletins continua funcionando igual
+
+---
+
+## 1.2.0 — 4 de agosto de 2026
+
+**Ajustes, para a coordenação**
+
+Aba nova no menu, que só a coordenação enxerga.
+
+- **Quem usa o sistema**: cadastrar pessoas, trocar o papel, trocar a senha e
+  tirar o acesso de quem saiu da escola
+- **Calendário letivo**: criar, editar e apagar unidades, recessos e feriados
+- A última coordenação ativa não consegue se rebaixar nem tirar o próprio
+  acesso — evita trancar todo mundo do lado de fora
+- Trocar a senha de alguém desconecta essa pessoa de todos os PCs
+
+**Editar evento**
+
+Lápis ao lado de cada evento na agenda do mês.
+
+- Muda nome, categoria, datas e valor
+- Turma nova entra já com todos os alunos prontos para lançar
+- Turma que já tem pagamento não sai do evento sem estorno antes
+- Trocar o valor só mexe em quem ainda não pagou, e você escolhe se aplica
+- Cancelar evento, desde que não tenha pagamento lançado
+
+**Rodar sem janela aberta**
+
+`Rodar sem janela.bat` (como administrador) registra o sistema no Windows: ele
+sobe sozinho quando o PC liga, antes de alguém fazer login, e não fica uma
+janela preta que qualquer pessoa possa fechar por engano.
+
+---
+
 ## 1.1.0 — 4 de agosto de 2026
 
 **Aluno isento**

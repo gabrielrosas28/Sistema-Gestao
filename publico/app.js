@@ -114,7 +114,7 @@ const TELAS = {};
 async function irPara(tela) {
   document.querySelectorAll(".nav__item").forEach((b) => b.removeAttribute("aria-current"));
   const raiz = { inicio: "inicio", calendario: "calendario", eventos: "eventos",
-                 evento: "eventos", pagamentos: "eventos", turmas: "turmas" }[tela];
+                 evento: "eventos", pagamentos: "eventos", turmas: "turmas", ajustes: "ajustes" }[tela];
   document.querySelector(`.nav__item[data-ir="${raiz}"]`)?.setAttribute("aria-current", "page");
   barraTotais.hidden = true; trilha.hidden = true; trilha.innerHTML = ""; acoesTopo.innerHTML = "";
   window.scrollTo(0, 0);
@@ -541,6 +541,191 @@ TELAS.turmas = async () => {
 };
 
 /* ============================================================
+   ajustes — só a coordenação enxerga
+   ============================================================ */
+const TIPOS = { unidade: "Unidade letiva", recesso: "Recesso ou férias", feriado: "Feriado" };
+let abaAjustes = "pessoas";
+
+TELAS.ajustes = async () => {
+  titulo.textContent = "Ajustes";
+  const [pessoas, periodos] = await Promise.all([pegar("/api/usuarios"), pegar("/api/periodos")]);
+
+  acoesTopo.innerHTML = abaAjustes === "pessoas"
+    ? `<button class="btn btn--primario" data-nova-pessoa><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>Cadastrar pessoa</button>`
+    : `<button class="btn btn--primario" data-novo-periodo><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>Adicionar período</button>`;
+
+  conteudo.innerHTML = `
+    <div class="filtros">
+      <button class="chip" data-aba="pessoas" aria-pressed="${abaAjustes === "pessoas"}">Quem usa o sistema <span>${pessoas.filter((p) => p.ativo).length}</span></button>
+      <button class="chip" data-aba="calendario" aria-pressed="${abaAjustes === "calendario"}">Calendário letivo <span>${periodos.length}</span></button>
+    </div>
+    ${abaAjustes === "pessoas" ? listaPessoas(pessoas) : listaPeriodos(periodos)}`;
+
+  document.querySelectorAll("[data-aba]").forEach((b) => b.onclick = () => { abaAjustes = b.dataset.aba; irPara("ajustes"); });
+  document.querySelectorAll("[data-nova-pessoa]").forEach((b) => b.onclick = () => abrirUsuario());
+  document.querySelectorAll("[data-novo-periodo]").forEach((b) => b.onclick = () => abrirPeriodo());
+  document.querySelectorAll("[data-pessoa]").forEach((b) => b.onclick = () =>
+    abrirUsuario(pessoas.find((p) => p.id === Number(b.dataset.pessoa))));
+  document.querySelectorAll("[data-periodo]").forEach((b) => b.onclick = () =>
+    abrirPeriodo(periodos.find((p) => p.id === Number(b.dataset.periodo))));
+};
+
+function listaPessoas(pessoas) {
+  return `<div class="secao"><h2>Quem usa o sistema</h2>
+      <span class="secao__nota">Clique para editar ou trocar a senha</span></div>
+    <div class="eventos">${pessoas.map((p) => `
+      <button class="evento evento--pessoa ${p.ativo ? "" : "evento--inativo"}" data-pessoa="${p.id}">
+        <div>
+          <div class="evento__nome">${esc(p.nome)}${p.id === eu.id ? " <span class='etiqueta' style='background:var(--azul-claro);color:var(--azul)'>você</span>" : ""}</div>
+          <div class="evento__meta">${esc(p.email)}</div>
+        </div>
+        <span class="etiqueta" style="${p.papel === "coordenacao"
+          ? "background:var(--azul-claro);color:var(--azul)" : "background:var(--papel);color:var(--cinza)"}">
+          ${p.papel === "coordenacao" ? "Coordenação" : "Secretaria"}</span>
+        <span class="evento__meta">${p.ativo ? "" : "sem acesso"}</span>
+        <svg class="evento__seta" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="m9 6 6 6-6 6"/></svg>
+      </button>`).join("")}</div>
+    <p class="ajuda" style="margin-top:14px">A coordenação faz tudo que a secretaria faz, e ainda cria eventos,
+    fecha e reabre turma, edita o calendário e cadastra quem usa o sistema.</p>`;
+}
+
+function listaPeriodos(periodos) {
+  const grupos = Object.entries(TIPOS).map(([tipo, nome]) => ({
+    tipo, nome, lista: periodos.filter((p) => p.tipo === tipo)
+  })).filter((g) => g.lista.length);
+  if (!grupos.length) return `<div class="vazio"><h3>Calendário letivo vazio</h3>
+    <p>Adicione as unidades, os recessos e os feriados do ano.</p></div>`;
+  return grupos.map((g) => `
+    <div class="grupo-titulo">${g.nome}</div>
+    <div class="eventos">${g.lista.map((p) => `
+      <button class="evento evento--periodo" data-periodo="${p.id}">
+        <div>
+          <div class="evento__nome">${esc(p.nome)}</div>
+          <div class="evento__meta">${p.inicio === p.fim ? diaMes(p.inicio) : `${diaMes(p.inicio)} a ${diaMes(p.fim)}`}
+            ${p.inicio !== p.fim ? `· ${Math.round((new Date(p.fim) - new Date(p.inicio)) / 86400e3) + 1} dias` : ""}</div>
+        </div>
+        <svg class="evento__seta" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="m9 6 6 6-6 6"/></svg>
+      </button>`).join("")}</div>`).join("");
+}
+
+/* ---------- modal: pessoa ---------- */
+let pessoaEditando = null;
+
+function abrirUsuario(pessoa) {
+  pessoaEditando = pessoa || null;
+  $("#recadoUsuario").hidden = true;
+  $("#tituloUsuario").textContent = pessoa ? "Editar pessoa" : "Cadastrar pessoa";
+  $("#salvarUsuario").textContent = pessoa ? "Salvar" : "Cadastrar";
+  $("#usNome").value = pessoa?.nome || "";
+  $("#usEmail").value = pessoa?.email || "";
+  $("#usEmail").disabled = !!pessoa;
+  $("#usSenha").value = "";
+  $("#usSenha").placeholder = pessoa ? "deixe em branco para manter a atual" : "mínimo 8 letras";
+  $("#ajudaSenha").textContent = pessoa
+    ? "Trocar a senha desconecta essa pessoa de todos os PCs."
+    : "Passe a senha para a pessoa. Ela pode ser trocada depois.";
+
+  let papel = pessoa?.papel || "secretaria";
+  let ativo = pessoa ? !!pessoa.ativo : true;
+  const desenhar = () => {
+    $("#papelEscolha").innerHTML = `
+      ${[["secretaria", "Secretaria", "Lança e estorna pagamentos, marca participação e isenção, exporta relatórios."],
+         ["coordenacao", "Coordenação", "Tudo da secretaria, mais criar eventos, fechar e reabrir turma, editar o calendário e cadastrar pessoas."]]
+        .map(([id, nome, nota]) => `
+        <button class="escolha" data-papel="${id}" aria-pressed="${papel === id}">
+          <span class="escolha__marca"></span>
+          <span><span class="escolha__titulo">${nome}</span><br><span class="escolha__nota">${nota}</span></span>
+        </button>`).join("")}
+      ${pessoa ? `<label class="opcao" style="margin-top:6px"><input type="checkbox" id="usAtivo" ${ativo ? "checked" : ""}>
+        Pode entrar no sistema</label>` : ""}`;
+    $("#papelEscolha").querySelectorAll("[data-papel]").forEach((b) => b.onclick = () => { papel = b.dataset.papel; desenhar(); });
+    if (pessoa) $("#usAtivo").onchange = (e) => (ativo = e.target.checked);
+  };
+  desenhar();
+
+  $("#salvarUsuario").onclick = async () => {
+    const recado = $("#recadoUsuario");
+    const botao = $("#salvarUsuario");
+    botao.disabled = true;
+    try {
+      if (pessoa) {
+        const corpo = { nome: $("#usNome").value, papel, ativo };
+        if ($("#usSenha").value) corpo.senha = $("#usSenha").value;
+        await trocar(`/api/usuarios/${pessoa.id}`, corpo);
+        avisar(`${$("#usNome").value} atualizado`);
+      } else {
+        await enviar("/api/usuarios", {
+          nome: $("#usNome").value, email: $("#usEmail").value,
+          senha: $("#usSenha").value, papel
+        });
+        avisar(`${$("#usNome").value} cadastrado`);
+      }
+      $("#cortinaUsuario").hidden = true;
+      irPara("ajustes");
+    } catch (err) {
+      recado.hidden = false; recado.textContent = err.message;
+    } finally {
+      botao.disabled = false;
+    }
+  };
+
+  $("#cortinaUsuario").hidden = false;
+  $(pessoa ? "#usNome" : "#usNome").focus();
+}
+
+/* ---------- modal: período do calendário ---------- */
+let periodoEditando = null;
+
+function abrirPeriodo(periodo) {
+  periodoEditando = periodo || null;
+  $("#recadoPeriodo").hidden = true;
+  $("#tituloPeriodo").textContent = periodo ? "Editar período" : "Adicionar período";
+  $("#apagarPeriodo").hidden = !periodo;
+  $("#peNome").value = periodo?.nome || "";
+  $("#peInicio").value = periodo?.inicio || hojeIso();
+  $("#peFim").value = periodo && periodo.fim !== periodo.inicio ? periodo.fim : "";
+
+  let tipo = periodo?.tipo || "unidade";
+  const CORES = { unidade: "var(--azul)", recesso: "var(--amarelo)", feriado: "var(--vermelho)" };
+  const desenhar = () => {
+    $("#tipoEscolha").innerHTML = Object.entries(TIPOS).map(([id, nome]) =>
+      `<button class="turma-chip" data-tipo="${id}" aria-pressed="${tipo === id}"
+         style="${tipo === id ? `background:${CORES[id]};color:#fff` : ""}">${nome}</button>`).join("");
+    $("#tipoEscolha").querySelectorAll("[data-tipo]").forEach((b) => b.onclick = () => { tipo = b.dataset.tipo; desenhar(); });
+  };
+  desenhar();
+
+  $("#salvarPeriodo").onclick = async () => {
+    const recado = $("#recadoPeriodo");
+    const corpo = { nome: $("#peNome").value, tipo, inicio: $("#peInicio").value, fim: $("#peFim").value || null };
+    const botao = $("#salvarPeriodo");
+    botao.disabled = true;
+    try {
+      if (periodo) await trocar(`/api/periodos/${periodo.id}`, corpo);
+      else await enviar("/api/periodos", corpo);
+      $("#cortinaPeriodo").hidden = true;
+      avisar(`${corpo.nome} salvo no calendário`);
+      irPara("ajustes");
+    } catch (err) {
+      recado.hidden = false; recado.textContent = err.message;
+    } finally { botao.disabled = false; }
+  };
+
+  $("#apagarPeriodo").onclick = async () => {
+    if (!confirm(`Apagar "${periodo.nome}" do calendário?`)) return;
+    try {
+      await apagar(`/api/periodos/${periodo.id}`);
+      $("#cortinaPeriodo").hidden = true;
+      avisar(`${periodo.nome} apagado`);
+      irPara("ajustes");
+    } catch (err) { avisar(err.message, true); }
+  };
+
+  $("#cortinaPeriodo").hidden = false;
+  $("#peNome").focus();
+}
+
+/* ============================================================
    calendário
    ============================================================ */
 TELAS.calendario = async () => {
@@ -604,14 +789,19 @@ TELAS.calendario = async () => {
     <div class="agenda">${doMes.length ? doMes.map((e) => {
       const c = CATEGORIAS[e.categoria] || { nome: "Evento", cor: "#999" };
       const dia = new Date(e.inicio + "T12:00");
-      return `<button class="agenda__item" style="border-left-color:${c.cor}" data-evento="${e.id}">
-        <div class="agenda__data"><b>${dia.getDate()}</b>${["dom","seg","ter","qua","qui","sex","sáb"][dia.getDay()]}</div>
-        <div>
-          <div class="agenda__nome">${esc(e.nome)}</div>
-          <div class="agenda__meta">${e.qtd_turmas} ${e.qtd_turmas === 1 ? "turma" : "turmas"}${e.fim ? " · até " + diaMes(e.fim) : ""}${e.cobra ? " · " + brl(e.valor) + " por aluno" : " · sem cobrança"}</div>
-        </div>
+      return `<div class="agenda__item" style="border-left-color:${c.cor}">
+        <button class="agenda__abrir" data-evento="${e.id}">
+          <div class="agenda__data"><b>${dia.getDate()}</b>${["dom","seg","ter","qua","qui","sex","sáb"][dia.getDay()]}</div>
+          <div>
+            <div class="agenda__nome">${esc(e.nome)}</div>
+            <div class="agenda__meta">${e.qtd_turmas} ${e.qtd_turmas === 1 ? "turma" : "turmas"}${e.fim ? " · até " + diaMes(e.fim) : ""}${e.cobra ? " · " + brl(e.valor) + " por aluno" : " · sem cobrança"}</div>
+          </div>
+        </button>
         <span class="etiqueta" style="background:${c.cor}22;color:${c.cor}">${c.nome}</span>
-      </button>`;
+        <button class="agenda__editar somente-coord" data-editar="${e.id}" title="Editar evento" aria-label="Editar ${esc(e.nome)}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 20h4L20 8l-4-4L4 16z"/></svg>
+        </button>
+      </div>`;
     }).join("") : `<div class="vazio"><h3>Nenhum evento em ${MESES[mes].toLowerCase()}</h3><p>Crie um evento para aparecer aqui.</p></div>`}</div>`;
 
   document.querySelectorAll("[data-mes]").forEach((b) => b.onclick = () => {
@@ -640,7 +830,14 @@ function ligar() {
     irPara("pagamentos");
   });
   document.querySelectorAll("[data-voltar]").forEach((b) => b.onclick = () => irPara(b.dataset.voltar));
-  document.querySelectorAll("[data-novo]").forEach((b) => b.onclick = abrirEvento);
+  document.querySelectorAll("[data-novo]").forEach((b) => b.onclick = () => { abrirEvento.preenchido = false; abrirEvento(); });
+  document.querySelectorAll("[data-editar]").forEach((b) => b.onclick = async () => {
+    try {
+      const e = await pegar(`/api/eventos/${b.dataset.editar}`);
+      abrirEvento.preenchido = false;
+      abrirEvento(e);
+    } catch (err) { avisar(err.message, true); }
+  });
   document.querySelectorAll("[data-relatorio]").forEach((b) => b.onclick = abrirRelatorio);
 
   document.querySelectorAll("[data-fecharturma]").forEach((b) => b.onclick = async () => {
@@ -663,16 +860,35 @@ function ligar() {
 }
 
 /* ============================================================
-   modal: criar evento
+   modal: criar e editar evento
    ============================================================ */
-function abrirEvento() {
+let eventoEditando = null;
+
+function abrirEvento(evento) {
+  eventoEditando = evento || null;
   $("#recadoEvento").hidden = true;
-  $("#evData").value = $("#evData").value || hojeIso();
+  $("#tituloEvento").textContent = evento ? "Editar evento" : "Criar evento";
+  $("#salvarEvento").textContent = evento ? "Salvar alterações" : "Criar evento";
+  $("#cancelarEvento").hidden = !evento;
+  $("#campoAplicar").hidden = !evento;
+  $("#evCobra").disabled = !!evento;   // virar cobrado depois mexeria em todo mundo
+
+  if (evento && !abrirEvento.preenchido) {
+    $("#evNome").value = evento.nome;
+    $("#evData").value = evento.inicio;
+    $("#evFim").value = evento.fim || "";
+    $("#evValor").value = evento.cobra ? Number(evento.valor).toFixed(2).replace(".", ",") : "";
+    $("#evCobra").checked = !!evento.cobra;
+    catNovoEvento = evento.categoria;
+    turmasNovoEvento = new Set((evento.turmas || []).map((t) => t.id));
+    abrirEvento.preenchido = true;
+  }
+  if (!evento) $("#evData").value = $("#evData").value || hojeIso();
 
   $("#catEscolha").innerHTML = Object.entries(CATEGORIAS).map(([k, c]) =>
     `<button class="turma-chip" data-cat="${k}" aria-pressed="${catNovoEvento === k}"
        style="${catNovoEvento === k ? `background:${c.cor};color:#fff` : ""}">${c.nome}</button>`).join("");
-  $("#catEscolha").querySelectorAll("[data-cat]").forEach((b) => b.onclick = () => { catNovoEvento = b.dataset.cat; abrirEvento(); });
+  $("#catEscolha").querySelectorAll("[data-cat]").forEach((b) => b.onclick = () => { catNovoEvento = b.dataset.cat; abrirEvento(eventoEditando); });
 
   $("#evCobra").onchange = (e) => ($("#campoValor").hidden = !e.target.checked);
   $("#campoValor").hidden = !$("#evCobra").checked;
@@ -704,7 +920,7 @@ function abrirEvento() {
     const lista = turmas.filter((t) => t.segmento === b.dataset.seg);
     const todas = lista.every((t) => turmasNovoEvento.has(t.id));
     lista.forEach((t) => todas ? turmasNovoEvento.delete(t.id) : turmasNovoEvento.add(t.id));
-    abrirEvento();
+    abrirEvento(eventoEditando);
   });
 
   $("#cortinaEvento").hidden = false;
@@ -723,22 +939,56 @@ $("#salvarEvento").onclick = async () => {
     valor: cobra ? Number(($("#evValor").value || "0").replace(/\./g, "").replace(",", ".")) : 0,
     turmas: [...turmasNovoEvento]
   };
+  const editando = eventoEditando;
   const botao = $("#salvarEvento");
-  botao.disabled = true; botao.textContent = "Criando...";
+  const rotulo = botao.textContent;
+  botao.disabled = true; botao.textContent = editando ? "Salvando..." : "Criando...";
   try {
-    await enviar("/api/eventos", corpo);
-    $("#cortinaEvento").hidden = true;
-    $("#evNome").value = ""; $("#evValor").value = ""; $("#evFim").value = "";
-    turmasNovoEvento.clear();
+    if (editando) {
+      corpo.aplicarValor = $("#evAplicar").checked;
+      const r = await trocar(`/api/eventos/${editando.id}`, corpo);
+      const partes = [];
+      if (r.entraram) partes.push(`${r.entraram} ${r.entraram === 1 ? "turma entrou" : "turmas entraram"}`);
+      if (r.sairam) partes.push(`${r.sairam} ${r.sairam === 1 ? "turma saiu" : "turmas saíram"}`);
+      if (r.valoresTrocados) partes.push(`${r.valoresTrocados} ${r.valoresTrocados === 1 ? "valor atualizado" : "valores atualizados"}`);
+      avisar(`"${corpo.nome}" salvo${partes.length ? " · " + partes.join(", ") : ""}`);
+    } else {
+      await enviar("/api/eventos", corpo);
+      avisar(`"${corpo.nome}" criado`);
+    }
+    fecharEvento();
     mesAtual = new Date(corpo.inicio + "T12:00");
-    avisar(`"${corpo.nome}" criado`);
     irPara("calendario");
   } catch (err) {
     recado.hidden = false; recado.textContent = err.message;
   } finally {
-    botao.disabled = false; botao.textContent = "Criar evento";
+    botao.disabled = false; botao.textContent = rotulo;
   }
 };
+
+$("#cancelarEvento").onclick = async () => {
+  if (!eventoEditando) return;
+  if (!confirm(`Cancelar o evento "${eventoEditando.nome}"?\n\n` +
+               `Ele sai do calendário e das listas de pagamento. O histórico continua guardado.`)) return;
+  try {
+    await apagar(`/api/eventos/${eventoEditando.id}`);
+    avisar(`"${eventoEditando.nome}" cancelado`);
+    fecharEvento();
+    irPara("calendario");
+  } catch (err) {
+    const recado = $("#recadoEvento");
+    recado.hidden = false; recado.textContent = err.message;
+  }
+};
+
+function fecharEvento() {
+  $("#cortinaEvento").hidden = true;
+  $("#evNome").value = ""; $("#evValor").value = ""; $("#evFim").value = "";
+  $("#evCobra").checked = true; $("#evCobra").disabled = false;
+  turmasNovoEvento.clear();
+  eventoEditando = null;
+  abrirEvento.preenchido = false;
+}
 
 /* ============================================================
    relatórios
@@ -873,12 +1123,15 @@ function gerarImpressao(dados, incFora, incResumo, incAssina, soPendentes) {
 /* ============================================================
    geral
    ============================================================ */
-document.querySelectorAll("[data-fechar]").forEach((b) => b.onclick = () =>
-  document.querySelectorAll(".cortina").forEach((c) => (c.hidden = true)));
-document.querySelectorAll(".cortina").forEach((c) => c.onclick = (e) => { if (e.target === c) c.hidden = true; });
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") document.querySelectorAll(".cortina").forEach((c) => (c.hidden = true));
-});
+// Fechar qualquer modal limpa o rascunho, para o próximo abrir em branco.
+function fecharTudo() {
+  document.querySelectorAll(".cortina").forEach((c) => (c.hidden = true));
+  eventoEditando = null; pessoaEditando = null; periodoEditando = null;
+  abrirEvento.preenchido = false;
+}
+document.querySelectorAll("[data-fechar]").forEach((b) => b.onclick = fecharTudo);
+document.querySelectorAll(".cortina").forEach((c) => c.onclick = (e) => { if (e.target === c) fecharTudo(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") fecharTudo(); });
 
 /* ---------- começa aqui ---------- */
 (async () => {

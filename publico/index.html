@@ -64,6 +64,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M16 9.5a3 3 0 1 0 0-4M18 20c0-2.2-.8-3.9-2-5"/></svg>
         Turmas
       </button>
+      <button class="nav__item somente-coord" data-ir="ajustes">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg>
+        Ajustes
+      </button>
     </div>
     <div class="nav__rodape">
       <div class="nav__pessoa" id="navNome"></div>
@@ -116,10 +120,13 @@
         <label for="evValor">Valor por aluno</label>
         <input id="evValor" class="valor-entrada" style="width:130px" placeholder="0,00" inputmode="decimal">
         <span class="ajuda">Dá para mudar o valor de um aluno específico depois.</span>
+        <label class="opcao" id="campoAplicar" hidden><input type="checkbox" id="evAplicar" checked>
+          Aplicar o valor novo a quem ainda não pagou</label>
       </div>
     </div>
     <div class="modal__rodape">
-      <button class="btn btn--fantasma" data-fechar>Cancelar</button>
+      <button class="btn btn--fantasma" id="cancelarEvento" style="margin-right:auto;color:var(--vermelho)" hidden>Cancelar evento</button>
+      <button class="btn btn--fantasma" data-fechar>Fechar</button>
       <button class="btn btn--primario" id="salvarEvento">Criar evento</button>
     </div>
   </div>
@@ -162,6 +169,62 @@
     <div class="modal__rodape">
       <button class="btn btn--fantasma" data-fechar>Cancelar</button>
       <button class="btn btn--primario" id="gerarRelatorio">Gerar relatório</button>
+    </div>
+  </div>
+</div>
+
+<!-- modal: cadastrar ou editar quem usa o sistema -->
+<div class="cortina" id="cortinaUsuario" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="tituloUsuario">
+    <div class="modal__topo">
+      <h2 id="tituloUsuario">Cadastrar pessoa</h2>
+      <button class="btn btn--fantasma" style="padding:4px 10px" data-fechar>Fechar</button>
+    </div>
+    <div class="modal__corpo">
+      <div class="recado" id="recadoUsuario" hidden></div>
+      <div class="form-campo"><label for="usNome">Nome completo</label><input id="usNome" placeholder="Ex.: Maria Silva"></div>
+      <div class="form-campo"><label for="usEmail">E-mail</label><input id="usEmail" type="email" placeholder="maria@santachiara.com.br"></div>
+      <div class="form-campo">
+        <label for="usSenha">Senha</label>
+        <input id="usSenha" type="text" placeholder="mínimo 8 letras">
+        <span class="ajuda" id="ajudaSenha">Passe a senha para a pessoa. Ela pode ser trocada depois.</span>
+      </div>
+      <div class="form-campo">
+        <span class="form-rotulo">O que essa pessoa pode fazer</span>
+        <div class="escolhas" id="papelEscolha"></div>
+      </div>
+    </div>
+    <div class="modal__rodape">
+      <button class="btn btn--fantasma" data-fechar>Cancelar</button>
+      <button class="btn btn--primario" id="salvarUsuario">Cadastrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- modal: período do calendário letivo -->
+<div class="cortina" id="cortinaPeriodo" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="tituloPeriodo" style="max-width:440px">
+    <div class="modal__topo">
+      <h2 id="tituloPeriodo">Período do calendário</h2>
+      <button class="btn btn--fantasma" style="padding:4px 10px" data-fechar>Fechar</button>
+    </div>
+    <div class="modal__corpo">
+      <div class="recado" id="recadoPeriodo" hidden></div>
+      <div class="form-campo"><label for="peNome">Nome</label><input id="peNome" placeholder="Ex.: 3ª unidade, Recesso junino, Natal"></div>
+      <div class="form-campo">
+        <span class="form-rotulo">Tipo</span>
+        <div class="turmas-escolha" id="tipoEscolha"></div>
+      </div>
+      <div class="form-campo" style="flex-direction:row;gap:14px;flex-wrap:wrap">
+        <span style="display:flex;flex-direction:column;gap:6px"><label for="peInicio">Começa em</label><input id="peInicio" type="date"></span>
+        <span style="display:flex;flex-direction:column;gap:6px"><label for="peFim">Termina em</label><input id="peFim" type="date"></span>
+      </div>
+      <span class="ajuda">Para um dia só, deixe o término em branco.</span>
+    </div>
+    <div class="modal__rodape">
+      <button class="btn btn--fantasma" id="apagarPeriodo" style="margin-right:auto;color:var(--vermelho)" hidden>Apagar</button>
+      <button class="btn btn--fantasma" data-fechar>Cancelar</button>
+      <button class="btn btn--primario" id="salvarPeriodo">Salvar</button>
     </div>
   </div>
 </div>

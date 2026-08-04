@@ -55,11 +55,13 @@ rem ---------- 4. turmas, calendario e alunos ----------
 echo   =============================================
 echo   Agora os alunos.
 echo.
-echo   Arraste para esta janela a planilha do gerador de boletins
-echo   (Gerador de boletim - 2026.xlsx) e aperte Enter.
+echo   Arraste para esta janela a lista de alunos e aperte Enter.
 echo.
-echo   Se ela ainda nao estiver neste PC, so aperte Enter: as turmas e o
-echo   calendario entram do mesmo jeito, e os alunos ficam para depois.
+echo   Serve o Exportado.CSV do sistema da escola (escola inteira) ou o
+echo   Gerador de boletim - 2026.xlsx (so do 2o ao 5o ano).
+echo.
+echo   Se o arquivo ainda nao estiver neste PC, so aperte Enter: o calendario
+echo   letivo entra do mesmo jeito, e os alunos ficam para depois.
 echo.
 set "PLANILHA="
 set /p PLANILHA=  Planilha:

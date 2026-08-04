@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { networkInterfaces } from "node:os";
 
 import { bd, listar, buscar, rodar, anotar, emBloco, ANO_LETIVO, CAMINHO_BANCO, VERSAO } from "./banco.js";
-import { entrar, sair, exigirLogin, exigirCoordenacao, criarUsuario } from "./acesso.js";
+import { entrar, sair, exigirLogin, exigirCoordenacao, criarUsuario, trocarSenha } from "./acesso.js";
 
 const aqui = dirname(fileURLToPath(import.meta.url));
 const PORTA = Number(process.env.PORTA || 8080);
@@ -22,6 +22,8 @@ app.use(express.static(join(aqui, "..", "publico")));
 // Erro em rota async não pode derrubar o servidor da secretaria.
 const rota = (fn) => (req, res) =>
   Promise.resolve(fn(req, res)).catch((e) => {
+    // Erro com status é regra de negócio, e a mensagem serve para quem usa.
+    if (e?.status) return res.status(e.status).json({ erro: e.message });
     console.error("[erro]", req.method, req.path, e);
     res.status(500).json({ erro: "Algo deu errado aqui no servidor. Tente de novo." });
   });
@@ -146,6 +148,131 @@ app.post("/api/eventos", exigirCoordenacao, rota((req, res) => {
   })();
 
   res.status(201).json({ id });
+}));
+
+// Editar evento é da coordenação: mexe em data, valor e turmas.
+app.put("/api/eventos/:id", exigirCoordenacao, rota((req, res) => {
+  const e = buscar(`SELECT * FROM eventos WHERE id = ?`, req.params.id);
+  if (!e) return res.status(404).json({ erro: "Evento não encontrado." });
+
+  const { nome, categoria, inicio, fim, valor, aplicarValor, turmas, observacao } = req.body;
+  if (!nome?.trim()) return res.status(400).json({ erro: "Dê um nome ao evento." });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(inicio || ""))
+    return res.status(400).json({ erro: "Escolha a data de início." });
+  if (fim && fim < inicio)
+    return res.status(400).json({ erro: "A data de término é anterior à de início." });
+  const valorNum = valorValido(valor) ?? e.valor;
+  if (e.cobra && !(valorNum > 0)) return res.status(400).json({ erro: "Informe o valor por aluno." });
+
+  const resultado = emBloco(() => {
+    rodar(`UPDATE eventos SET nome = ?, categoria = ?, inicio = ?, fim = ?, valor = ?, observacao = ?
+            WHERE id = ?`,
+          nome.trim(), categoria || e.categoria, inicio, fim || null, valorNum,
+          observacao ?? e.observacao, e.id);
+
+    let entraram = 0, sairam = 0, valoresTrocados = 0;
+
+    if (Array.isArray(turmas) && turmas.length) {
+      const atuais = new Set(listar(
+        `SELECT turma_id FROM evento_turmas WHERE evento_id = ?`, e.id).map((t) => t.turma_id));
+      const novas = new Set(turmas.map(Number));
+
+      for (const id of novas) if (!atuais.has(id)) {
+        rodar(`INSERT INTO evento_turmas (evento_id, turma_id) VALUES (?, ?)`, e.id, id);
+        if (e.cobra) completarParticipacoes(e.id, id);
+        entraram++;
+      }
+      for (const id of atuais) if (!novas.has(id)) {
+        // Tirar uma turma que já pagou apagaria o registro do dinheiro.
+        const pago = buscar(
+          `SELECT COUNT(*) AS n FROM v_situacao WHERE evento_id = ? AND turma_id = ? AND situacao = 'pago'`,
+          e.id, id).n;
+        if (pago) {
+          const t = buscar(`SELECT nome FROM turmas WHERE id = ?`, id);
+          throw Object.assign(new Error(
+            `${t.nome} já tem ${pago} ${pago === 1 ? "pagamento lançado" : "pagamentos lançados"}. ` +
+            `Estorne antes de tirar a turma do evento.`), { status: 409 });
+        }
+        rodar(`DELETE FROM participacoes WHERE evento_id = ? AND aluno_id IN
+                 (SELECT id FROM alunos WHERE turma_id = ?)`, e.id, id);
+        rodar(`DELETE FROM evento_turmas WHERE evento_id = ? AND turma_id = ?`, e.id, id);
+        sairam++;
+      }
+    }
+
+    // Trocar o valor do evento só mexe em quem ainda não pagou.
+    if (aplicarValor && e.cobra) {
+      valoresTrocados = rodar(
+        `UPDATE participacoes SET valor = ?
+          WHERE evento_id = ? AND isento = 0
+            AND id NOT IN (SELECT participacao_id FROM pagamentos WHERE estornado_em IS NULL)`,
+        valorNum, e.id).changes;
+    }
+
+    anotar(req.usuario.id, "editou evento", "evento", e.id,
+           { nome, valor: valorNum, entraram, sairam, valoresTrocados });
+    return { entraram, sairam, valoresTrocados };
+  })();
+
+  res.json({ ...buscar(`SELECT * FROM eventos WHERE id = ?`, e.id), ...resultado });
+}));
+
+// Cancelar não apaga: o evento some das listas e o histórico continua.
+app.delete("/api/eventos/:id", exigirCoordenacao, rota((req, res) => {
+  const e = buscar(`SELECT * FROM eventos WHERE id = ?`, req.params.id);
+  if (!e) return res.status(404).json({ erro: "Evento não encontrado." });
+  const pagos = buscar(
+    `SELECT COUNT(*) AS n FROM v_situacao WHERE evento_id = ? AND situacao = 'pago'`, e.id).n;
+  if (pagos) return res.status(409).json({
+    erro: `Este evento já tem ${pagos} ${pagos === 1 ? "pagamento lançado" : "pagamentos lançados"}. ` +
+          `Estorne os pagamentos antes de cancelar, para as famílias não ficarem sem o registro.` });
+  rodar(`UPDATE eventos SET cancelado = 1 WHERE id = ?`, e.id);
+  anotar(req.usuario.id, "cancelou evento", "evento", e.id, { nome: e.nome });
+  res.json({ ok: true });
+}));
+
+// ---------- calendário letivo: unidades, recessos e feriados ----------
+app.get("/api/periodos", rota((req, res) => {
+  res.json(listar(`SELECT * FROM periodos WHERE ano_letivo = ? ORDER BY inicio, nome`, ANO_LETIVO));
+}));
+
+function validarPeriodo(b) {
+  if (!b.nome?.trim()) return "Dê um nome ao período.";
+  if (!["unidade", "recesso", "feriado"].includes(b.tipo)) return "Escolha o tipo do período.";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(b.inicio || "")) return "Escolha a data de início.";
+  const fim = b.fim || b.inicio;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fim)) return "Data de término inválida.";
+  if (fim < b.inicio) return "A data de término é anterior à de início.";
+  return null;
+}
+
+app.post("/api/periodos", exigirCoordenacao, rota((req, res) => {
+  const erro = validarPeriodo(req.body);
+  if (erro) return res.status(400).json({ erro });
+  const r = rodar(`INSERT INTO periodos (nome, tipo, inicio, fim, ano_letivo) VALUES (?, ?, ?, ?, ?)`,
+                  req.body.nome.trim(), req.body.tipo, req.body.inicio,
+                  req.body.fim || req.body.inicio, ANO_LETIVO);
+  anotar(req.usuario.id, "criou período", "periodo", Number(r.lastInsertRowid), req.body);
+  res.status(201).json({ id: Number(r.lastInsertRowid) });
+}));
+
+app.put("/api/periodos/:id", exigirCoordenacao, rota((req, res) => {
+  const p = buscar(`SELECT * FROM periodos WHERE id = ?`, req.params.id);
+  if (!p) return res.status(404).json({ erro: "Período não encontrado." });
+  const erro = validarPeriodo(req.body);
+  if (erro) return res.status(400).json({ erro });
+  rodar(`UPDATE periodos SET nome = ?, tipo = ?, inicio = ?, fim = ? WHERE id = ?`,
+        req.body.nome.trim(), req.body.tipo, req.body.inicio, req.body.fim || req.body.inicio, p.id);
+  anotar(req.usuario.id, "editou período", "periodo", p.id, req.body);
+  res.json({ ok: true });
+}));
+
+app.delete("/api/periodos/:id", exigirCoordenacao, rota((req, res) => {
+  const p = buscar(`SELECT * FROM periodos WHERE id = ?`, req.params.id);
+  if (!p) return res.status(404).json({ erro: "Período não encontrado." });
+  rodar(`DELETE FROM periodos WHERE id = ?`, p.id);
+  anotar(req.usuario.id, "apagou período", "periodo", p.id, { nome: p.nome });
+  res.json({ ok: true });
 }));
 
 // Mês do calendário: eventos, unidades, recessos e feriados juntos.
@@ -344,13 +471,52 @@ app.get("/api/usuarios", exigirCoordenacao, rota((req, res) => {
 
 app.post("/api/usuarios", exigirCoordenacao, rota((req, res) => {
   const { nome, email, senha, papel } = req.body;
-  if (!nome || !email || !senha) return res.status(400).json({ erro: "Preencha nome, e-mail e senha." });
+  if (!nome?.trim() || !email?.trim() || !senha)
+    return res.status(400).json({ erro: "Preencha nome, e-mail e senha." });
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim()))
+    return res.status(400).json({ erro: "Confira o e-mail." });
   if (senha.length < 8) return res.status(400).json({ erro: "A senha precisa de pelo menos 8 letras." });
   if (buscar(`SELECT id FROM usuarios WHERE email = ?`, email.trim().toLowerCase()))
     return res.status(409).json({ erro: "Já existe alguém com este e-mail." });
-  const id = criarUsuario({ nome, email, senha, papel: papel === "coordenacao" ? "coordenacao" : "secretaria" });
+  const id = criarUsuario({ nome: nome.trim(), email, senha,
+                            papel: papel === "coordenacao" ? "coordenacao" : "secretaria" });
   anotar(req.usuario.id, "cadastrou usuário", "usuario", Number(id), { nome, papel });
   res.status(201).json({ id });
+}));
+
+app.put("/api/usuarios/:id", exigirCoordenacao, rota((req, res) => {
+  const u = buscar(`SELECT * FROM usuarios WHERE id = ?`, req.params.id);
+  if (!u) return res.status(404).json({ erro: "Usuário não encontrado." });
+
+  const nome = (req.body.nome ?? u.nome).trim();
+  const papel = req.body.papel === undefined ? u.papel
+              : (req.body.papel === "coordenacao" ? "coordenacao" : "secretaria");
+  const ativo = req.body.ativo === undefined ? u.ativo : (req.body.ativo ? 1 : 0);
+
+  // Sem coordenação ativa ninguém mais cria evento nem reabre turma:
+  // o sistema ficaria trancado por fora.
+  if (u.papel === "coordenacao" && (papel !== "coordenacao" || !ativo)) {
+    const outras = buscar(
+      `SELECT COUNT(*) AS n FROM usuarios
+        WHERE papel = 'coordenacao' AND ativo = 1 AND id <> ?`, u.id).n;
+    if (!outras) return res.status(409).json({
+      erro: "Esta é a única coordenação ativa. Cadastre ou promova outra pessoa antes." });
+  }
+
+  if (req.body.senha !== undefined) {
+    if (String(req.body.senha).length < 8)
+      return res.status(400).json({ erro: "A senha precisa de pelo menos 8 letras." });
+    trocarSenha(u.id, req.body.senha);
+    // Trocar a senha derruba as sessões abertas daquela pessoa.
+    rodar(`DELETE FROM sessoes WHERE usuario_id = ?`, u.id);
+  }
+
+  rodar(`UPDATE usuarios SET nome = ?, papel = ?, ativo = ? WHERE id = ?`, nome, papel, ativo, u.id);
+  if (!ativo) rodar(`DELETE FROM sessoes WHERE usuario_id = ?`, u.id);
+
+  anotar(req.usuario.id, "editou usuário", "usuario", u.id,
+         { nome, papel, ativo, senhaTrocada: req.body.senha !== undefined });
+  res.json(buscar(`SELECT id, nome, email, papel, ativo FROM usuarios WHERE id = ?`, u.id));
 }));
 
 // ============================================================
