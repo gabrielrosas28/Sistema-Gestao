@@ -1,0 +1,21 @@
+{
+  "name": "gestao-santa-chiara",
+  "version": "1.1.0",
+  "description": "Sistema de gestão do Colégio Santa Chiara — calendário, eventos, pagamentos e boletins",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node src/iniciar.js",
+    "importar": "node --experimental-sqlite --no-warnings src/importar.js",
+    "criar-usuario": "node --experimental-sqlite --no-warnings src/criar-usuario.js",
+    "backup": "node --experimental-sqlite --no-warnings src/backup.js",
+    "testar": "node testes/coerencia.mjs && node testes/api.mjs && node --experimental-sqlite --no-warnings testes/qa.mjs"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "express": "^4.21.2",
+    "xlsx": "^0.18.5"
+  }
+}

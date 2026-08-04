@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gestão — Colégio Santa Chiara</title>
+<link rel="icon" href="assets/logo-santa-chiara.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+
+<!-- ============ entrada ============ -->
+<div class="entrada" id="telaEntrada" hidden>
+  <form class="entrada__caixa" id="formEntrada">
+    <div class="entrada__topo">
+      <img class="entrada__logo" src="assets/logo-santa-chiara.png" alt="">
+      <div>
+        <div class="entrada__nome">Gestão</div>
+        <div class="entrada__sub">Colégio Santa Chiara</div>
+      </div>
+    </div>
+    <div class="entrada__corpo">
+      <div class="recado" id="recadoEntrada" hidden></div>
+      <div class="form-campo">
+        <label for="email">E-mail</label>
+        <input id="email" type="email" autocomplete="username" required>
+      </div>
+      <div class="form-campo">
+        <label for="senha">Senha</label>
+        <input id="senha" type="password" autocomplete="current-password" required>
+      </div>
+      <button class="btn btn--primario" type="submit" id="btnEntrar">Entrar</button>
+    </div>
+  </form>
+</div>
+
+<!-- ============ sistema ============ -->
+<div class="app" id="telaApp" hidden>
+  <nav class="nav">
+    <div class="nav__marca">
+      <img class="nav__logo" src="assets/logo-santa-chiara.png" alt="Colégio Santa Chiara">
+      <div>
+        <div class="nav__nome">Gestão</div>
+        <div class="nav__sub">Santa Chiara</div>
+      </div>
+    </div>
+    <div class="nav__lista">
+      <button class="nav__item" data-ir="inicio" aria-current="page">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>
+        Início
+      </button>
+      <button class="nav__item" data-ir="calendario">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>
+        Calendário
+      </button>
+      <button class="nav__item" data-ir="eventos">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7h16v13H4z"/><path d="M9 4h6v3H9zM4 12h16"/></svg>
+        Pagamentos
+      </button>
+      <button class="nav__item" data-ir="turmas">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M16 9.5a3 3 0 1 0 0-4M18 20c0-2.2-.8-3.9-2-5"/></svg>
+        Turmas
+      </button>
+    </div>
+    <div class="nav__rodape">
+      <div class="nav__pessoa" id="navNome"></div>
+      <div class="nav__papel" id="navPapel"></div>
+      <button class="nav__sair" id="btnSair">Sair do sistema</button>
+    </div>
+  </nav>
+
+  <main class="principal">
+    <header class="topo">
+      <div class="topo__texto">
+        <div class="trilha" id="trilha" hidden></div>
+        <h1 class="titulo" id="titulo">Início</h1>
+      </div>
+      <div class="topo__acoes" id="acoesTopo"></div>
+    </header>
+    <div class="conteudo" id="conteudo"></div>
+  </main>
+</div>
+
+<div class="totais" id="totais" hidden></div>
+<div class="aviso" id="aviso" hidden></div>
+
+<!-- modal: criar evento -->
+<div class="cortina" id="cortinaEvento" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="tituloEvento">
+    <div class="modal__topo">
+      <h2 id="tituloEvento">Criar evento</h2>
+      <button class="btn btn--fantasma" style="padding:4px 10px" data-fechar>Fechar</button>
+    </div>
+    <div class="modal__corpo">
+      <div class="recado" id="recadoEvento" hidden></div>
+      <div class="form-campo"><label for="evNome">Nome do evento</label><input id="evNome" placeholder="Ex.: Festa junina"></div>
+      <div class="form-campo">
+        <span class="form-rotulo">Categoria</span>
+        <div class="turmas-escolha" id="catEscolha"></div>
+      </div>
+      <div class="form-campo" style="flex-direction:row;gap:14px;flex-wrap:wrap">
+        <span style="display:flex;flex-direction:column;gap:6px"><label for="evData">Começa em</label><input id="evData" type="date"></span>
+        <span style="display:flex;flex-direction:column;gap:6px"><label for="evFim">Termina em</label><input id="evFim" type="date"></span>
+      </div>
+      <div class="form-campo">
+        <label>Turmas participantes</label>
+        <div id="turmasEscolha"></div>
+      </div>
+      <div class="form-campo">
+        <label class="opcao" style="text-transform:none;letter-spacing:0;font-size:14px;color:var(--grafite)"><input type="checkbox" id="evCobra" checked> Este evento tem pagamento</label>
+      </div>
+      <div class="form-campo" id="campoValor">
+        <label for="evValor">Valor por aluno</label>
+        <input id="evValor" class="valor-entrada" style="width:130px" placeholder="0,00" inputmode="decimal">
+        <span class="ajuda">Dá para mudar o valor de um aluno específico depois.</span>
+      </div>
+    </div>
+    <div class="modal__rodape">
+      <button class="btn btn--fantasma" data-fechar>Cancelar</button>
+      <button class="btn btn--primario" id="salvarEvento">Criar evento</button>
+    </div>
+  </div>
+</div>
+
+<!-- modal: exportar relatório -->
+<div class="cortina" id="cortinaRelatorio" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="tituloRelatorio">
+    <div class="modal__topo">
+      <h2 id="tituloRelatorio">Exportar relatório de pagamentos</h2>
+      <button class="btn btn--fantasma" style="padding:4px 10px" data-fechar>Fechar</button>
+    </div>
+    <div class="modal__corpo">
+      <div class="form-campo">
+        <span class="form-rotulo">O que entra no relatório</span>
+        <div class="escolhas" id="escopoRel"></div>
+      </div>
+      <div class="form-campo">
+        <span class="form-rotulo">Formato</span>
+        <div class="escolhas">
+          <button class="escolha" data-formato="pdf" aria-pressed="true">
+            <span class="escolha__marca"></span>
+            <span><span class="escolha__titulo">Documento para imprimir</span><br>
+            <span class="escolha__nota">Papel timbrado do colégio, com conferência de caixa e linha de assinatura. Abre a janela de impressão — dá para salvar em PDF.</span></span>
+          </button>
+          <button class="escolha" data-formato="csv" aria-pressed="false">
+            <span class="escolha__marca"></span>
+            <span><span class="escolha__titulo">Planilha (.csv)</span><br>
+            <span class="escolha__nota">Abre no Excel. Uma linha por aluno, para somar e filtrar do seu jeito.</span></span>
+          </button>
+        </div>
+      </div>
+      <div class="form-campo">
+        <span class="form-rotulo">Incluir</span>
+        <label class="opcao"><input type="checkbox" id="incFora" checked> Alunos que não participam</label>
+        <label class="opcao"><input type="checkbox" id="incResumo" checked> Resumo financeiro no topo</label>
+        <label class="opcao"><input type="checkbox" id="incAssina" checked> Linha de assinatura (secretaria e coordenação)</label>
+      </div>
+    </div>
+    <div class="modal__rodape">
+      <button class="btn btn--fantasma" data-fechar>Cancelar</button>
+      <button class="btn btn--primario" id="gerarRelatorio">Gerar relatório</button>
+    </div>
+  </div>
+</div>
+
+<div id="relatorio"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
