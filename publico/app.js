@@ -48,9 +48,16 @@ async function api(metodo, caminho, corpo) {
   } catch {
     throw new ErroDoServidor("Sem conexão com o servidor da escola. Confira se ele está ligado.", 0);
   }
-  if (r.status === 401) { mostrarEntrada("Sua sessão expirou. Entre de novo."); throw new ErroDoServidor("sessão expirada", 401); }
   let dados = null;
   try { dados = await r.json(); } catch {}
+  // O 401 da própria tela de entrada é senha errada, não sessão vencida.
+  // Tratar os dois igual mandava quem errou a senha para "sessão expirou",
+  // que não diz nada sobre o que a pessoa precisa fazer.
+  const ehLogin = caminho === "/api/sessao" && metodo === "POST";
+  if (r.status === 401 && !ehLogin) {
+    mostrarEntrada("Sua sessão expirou. Entre de novo.");
+    throw new ErroDoServidor("sessão expirada", 401);
+  }
   if (!r.ok) throw new ErroDoServidor(dados?.erro || "Não consegui completar essa ação.", r.status);
   return dados;
 }

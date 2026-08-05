@@ -50,6 +50,17 @@ Junto disso:
   8080 antes de dizer que deu certo, e mostra o fim do log quando não subiu
 - Some o limite de 72 horas do Agendador, que derrubaria o servidor sozinho
   no meio da semana; e a tarefa passa a tentar voltar 3 vezes se travar
+- **Todos os `.bat` estavam com quebra de linha do Linux (LF).** Uma mina
+  antiga: com LF o `cmd` quase funciona, até alguém usar `goto`. O `goto`
+  navega por posição de byte no arquivo; faltando o CR ele erra por um byte a
+  cada linha e come o primeiro caractere das seguintes — `echo` vira `cho`,
+  `set` vira `et`. O `.gitattributes` já mandava usar CRLF, mas **nunca tinha
+  sido publicado**, então a regra não valia para ninguém. Arquivos convertidos
+  e o `coerencia.mjs` agora reprova qualquer `.bat` que volte para LF
+- O teste de administrador não usa mais só `net session`, que falha também
+  quando o serviço "Servidor" do Windows está desligado — e aí os `.bat`
+  recusavam rodar com o usuário já elevado. Agora olham o nível de
+  integridade do processo, que não depende de serviço nenhum
 - O `Diagnostico.bat` confere as quatro dependências uma a uma, não só o
   `express`. Uma `node_modules` copiada de outro PC ou tirada de um `.zip`
   vem pela metade, e antes isso passava como "componentes instalados"

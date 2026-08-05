@@ -101,5 +101,21 @@ for (const f of readdirSync(join(raiz, "src")).filter((n) => n.endsWith(".js")))
 ok(!suspeitos.length, "import() dinamico recebe URL, nao caminho do Windows",
    suspeitos.join(" | "));
 
+// ---- quebra de linha dos .bat ----
+// Arquivo de lote precisa de CRLF. Com LF o cmd quase funciona -- ate alguem
+// usar goto. O goto navega por posicao de byte; faltando o CR ele erra por um
+// byte a cada linha e come o primeiro caractere das seguintes: "echo" vira
+// "cho", "set" vira "et". O erro nao aponta para a causa, e a causa nao
+// aparece no editor. Ja aconteceu; que nao aconteca de novo em silencio.
+const comLF = [];
+for (const f of readdirSync(raiz).filter((n) => /\.(bat|cmd)$/i.test(n))) {
+  const bruto = readFileSync(join(raiz, f), "latin1");
+  const linhas = bruto.split("\n").length - 1;
+  const comCR = bruto.split("\r\n").length - 1;
+  if (linhas !== comCR) comLF.push(`${f} (${linhas - comCR} linha(s) sem CR)`);
+}
+ok(!comLF.length, "arquivos .bat com quebra de linha do Windows (CRLF)",
+   comLF.join(" | "));
+
 console.log(`\n  ${falhas ? falhas + " falha(s)" : "tudo passou"}\n`);
 process.exit(falhas ? 1 : 0);

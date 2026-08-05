@@ -10,17 +10,35 @@ set "SERVICO=%~dp0_servico.cmd"
 set "LOG=%~dp0dados\servidor.log"
 
 rem ---------- precisa de administrador ----------
+rem  Nao dava para confiar so no "net session": ele tambem falha quando o
+rem  servico "Servidor" (LanmanServer) esta desligado, e ai o arquivo acusava
+rem  falta de administrador com o usuario ja elevado. O teste principal agora
+rem  e o nivel de integridade do processo, que nao depende de servico nenhum.
+rem  Sem pipe dentro de if: nesta casa isso ja deu problema.
+set "ADM="
+whoami /groups 2>nul | findstr /c:"S-1-16-12288" >nul
+if not errorlevel 1 set "ADM=1"
+if defined ADM goto eadmin
+whoami /groups 2>nul | findstr /c:"S-1-16-16384" >nul
+if not errorlevel 1 set "ADM=1"
+if defined ADM goto eadmin
+fsutil dirty query %SystemDrive% >nul 2>nul
+if not errorlevel 1 set "ADM=1"
+if defined ADM goto eadmin
 net session >nul 2>nul
-if errorlevel 1 (
-  echo.
-  echo   Este arquivo precisa ser aberto como administrador.
-  echo.
-  echo   Feche esta janela, clique com o botao direito no
-  echo   "Rodar sem janela.bat" e escolha "Executar como administrador".
-  echo.
-  pause
-  exit /b 1
-)
+if not errorlevel 1 set "ADM=1"
+if defined ADM goto eadmin
+
+echo.
+echo   Este arquivo precisa ser aberto como administrador.
+echo.
+echo   Feche esta janela, clique com o botao direito no
+echo   "Rodar sem janela.bat" e escolha "Executar como administrador".
+echo.
+pause
+exit /b 1
+
+:eadmin
 
 echo.
 echo   Rodar o Gestao sem janela aberta

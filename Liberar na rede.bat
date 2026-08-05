@@ -7,17 +7,33 @@ cd /d "%~dp0"
 set "REGRA=Gestao Santa Chiara"
 set "PORTA=8080"
 
+rem  O "net session" sozinho nao serve: ele tambem falha quando o servico
+rem  "Servidor" do Windows esta desligado, acusando falta de administrador
+rem  com o usuario ja elevado. Confere pelo nivel de integridade do processo.
+set "ADM="
+whoami /groups 2>nul | findstr /c:"S-1-16-12288" >nul
+if not errorlevel 1 set "ADM=1"
+if defined ADM goto eadmin
+whoami /groups 2>nul | findstr /c:"S-1-16-16384" >nul
+if not errorlevel 1 set "ADM=1"
+if defined ADM goto eadmin
+fsutil dirty query %SystemDrive% >nul 2>nul
+if not errorlevel 1 set "ADM=1"
+if defined ADM goto eadmin
 net session >nul 2>nul
-if errorlevel 1 (
-  echo.
-  echo   Este arquivo precisa ser aberto como administrador.
-  echo.
-  echo   Feche esta janela, clique com o botao direito no
-  echo   "Liberar na rede.bat" e escolha "Executar como administrador".
-  echo.
-  pause
-  exit /b 1
-)
+if not errorlevel 1 set "ADM=1"
+if defined ADM goto eadmin
+
+echo.
+echo   Este arquivo precisa ser aberto como administrador.
+echo.
+echo   Feche esta janela, clique com o botao direito no
+echo   "Liberar na rede.bat" e escolha "Executar como administrador".
+echo.
+pause
+exit /b 1
+
+:eadmin
 
 echo.
 echo   Liberar o Gestao na rede da escola
