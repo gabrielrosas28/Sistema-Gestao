@@ -1,3 +1,7 @@
 node_modules/
 dados/
 *.log
+
+# Gerado pelo "Rodar sem janela.bat": traz o caminho do Node deste PC,
+# que muda de máquina para máquina.
+_servico.cmd

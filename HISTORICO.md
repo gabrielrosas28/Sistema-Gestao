@@ -11,6 +11,50 @@ Formato `maior.menor.correção`:
 
 ---
 
+## 1.3.1 — 4 de agosto de 2026
+
+**O modo sem janela nunca funcionou, e o sistema escondia o motivo**
+
+Quatro erros empilhados. Um impedia o modo sem janela de existir, outro
+quebrava a partida em toda máquina Windows, e os outros dois faziam o sistema
+morrer calado, sem dizer o que havia dado errado.
+
+- **O `iniciar.js` nunca subiu pelo caminho principal no Windows.** O
+  `import()` dinâmico exige URL, não caminho. No Linux `/caminho/x.js` já é
+  URL válida e o erro não aparece; no Windows o `C:` vira "protocolo c:" e o
+  Node recusa com `ERR_UNSUPPORTED_ESM_URL_SCHEME`. Ou seja: desde sempre,
+  toda partida no servidor falhava e caía no plano B — o processo filho com
+  `--experimental-sqlite`. Funcionava por acidente. Agora passa
+  `pathToFileURL(...)`, e o `coerencia.mjs` reprova quem voltar a passar
+  caminho para o `import()`.
+
+- **A tarefa do Windows nascia truncada.** O comando inteiro ia dentro do
+  `/tr` do `schtasks`, com `\"` no meio. O `schtasks` lê os argumentos pela
+  regra do C, onde a barra invertida escapa a aspa seguinte — e o caminho da
+  pasta já termina em barra. O `\"` do fim virava barra literal mais fim de
+  aspas, e o `schtasks` recebia só `cmd /c cd /d "C:\Gestao\`, jogando fora o
+  node, o `servidor.js` e o log. Agora o comando mora num `_servico.cmd`
+  gerado ao lado do sistema, e o `/tr` é só um caminho.
+- **O `Gestao.bat` abria e fechava sem mostrar nada.** Faltava o `call` antes
+  do `npm`. Sem ele o `npm.cmd` toma o controle e a janela morre junto,
+  sem passar pelo `pause` — o erro aparecia e sumia no mesmo instante.
+- **O `iniciar.js` engolia qualquer erro.** O `catch` vazio tratava toda falha
+  como "falta a permissão do SQLite", tentava de novo do mesmo jeito e
+  desistia em silêncio. Porta ocupada, banco travado, erro de digitação: tudo
+  virava a mesma tela em branco. Agora só cai no plano B quando o motivo é
+  mesmo o `node:sqlite`; o resto aparece inteiro.
+
+Junto disso:
+
+- O `Rodar sem janela.bat` confere se o sistema **realmente** subiu na porta
+  8080 antes de dizer que deu certo, e mostra o fim do log quando não subiu
+- Some o limite de 72 horas do Agendador, que derrubaria o servidor sozinho
+  no meio da semana; e a tarefa passa a tentar voltar 3 vezes se travar
+- A opção [3] mostra estado da tarefa, último código de saída e fim do log
+- A opção [2] apaga também o `_servico.cmd`
+- Novo `Desinstalar.bat`: tira tudo do servidor — tarefa, firewall, banco,
+  backups e a própria pasta
+
 ## 1.3.0 — 4 de agosto de 2026
 
 **Importar a escola inteira**

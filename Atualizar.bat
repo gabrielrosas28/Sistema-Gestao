@@ -12,10 +12,14 @@ echo.
 rem ---------- o sistema esta rodando? ----------
 tasklist /fi "imagename eq node.exe" | find /i "node.exe" >nul
 if not errorlevel 1 (
-  echo   O sistema parece estar ligado.
+  echo   O sistema parece estar ligado, e os arquivos ficariam travados
+  echo   no meio da troca. Desligue antes de atualizar:
   echo.
-  echo   Feche a janela do Gestao.bat antes de atualizar, senao os
-  echo   arquivos ficam travados no meio da troca.
+  echo     - se estiver no modo sem janela, abra o "Rodar sem janela.bat"
+  echo       como administrador e escolha a opcao [2]
+  echo     - se nao, feche a janela preta do Gestao.bat
+  echo.
+  echo   Na duvida, o "Rodar sem janela.bat" opcao [3] diz qual e o caso.
   echo.
   pause
   exit /b 1

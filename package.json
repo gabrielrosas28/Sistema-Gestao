@@ -1,6 +1,6 @@
 {
   "name": "gestao-santa-chiara",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Sistema de gestão do Colégio Santa Chiara — calendário, eventos, pagamentos e boletins",
   "private": true,
   "type": "module",

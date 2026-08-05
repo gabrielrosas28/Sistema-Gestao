@@ -71,7 +71,21 @@ Nos outros PCs: http://192.168.0.10:8080
 
 ---
 
-## 4. Nos outros PCs
+## 4. Liberar no firewall
+
+Ainda no servidor, clique com o botão direito em **`Liberar na rede.bat`** e
+escolha **Executar como administrador**.
+
+Sem isso o sistema abre no próprio servidor mas **não abre nas outras
+máquinas** — o Firewall do Windows bloqueia conexões de fora. É o motivo número
+um de "não consigo acessar".
+
+Ele libera só as redes privada e de domínio. Rede pública continua bloqueada,
+que é o certo.
+
+---
+
+## 5. Nos outros PCs
 
 Abra o navegador e digite o endereço `http://192.168.0.10:8080` (o que apareceu
 na janela). Salve nos favoritos.
@@ -81,7 +95,7 @@ pode mudar quando o PC reiniciar e os favoritos param de funcionar.
 
 ---
 
-## 5. Deixar ligando sozinho
+## 6. Deixar ligando sozinho
 
 1. `Windows + R`, digite `shell:startup`, Enter
 2. Arraste o `Gestao.bat` para essa pasta segurando `Alt` (cria um atalho)
@@ -107,5 +121,7 @@ para rodar à mão, nenhum lançamento antigo é tocado.
 | `node não é reconhecido` | O Node.js não foi instalado, ou o PC não reiniciou depois |
 | `git não é reconhecido` | Instale o Git em <https://git-scm.com> |
 | `PARE AQUI. Esta pasta está dentro do OneDrive` | Mova a pasta para fora de qualquer pasta sincronizada |
-| Outro PC não abre o endereço | Firewall do Windows bloqueando a porta 8080, ou os PCs em redes diferentes |
+| Outro PC não abre o endereço | Rode `Liberar na rede.bat` como administrador no servidor |
+| Abre no servidor mas não nos outros | Mesma coisa: é o firewall |
+| Parou de abrir do nada | O IP do servidor mudou. Veja o novo na janela do `Gestao.bat` |
 | A planilha não foi encontrada | Rode `npm run importar -- "caminho\da\planilha.xlsx"` |

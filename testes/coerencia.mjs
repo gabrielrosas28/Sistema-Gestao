@@ -4,7 +4,7 @@
 // Pega o tipo de erro mais chato de achar: alguem renomeia um campo no banco,
 // a tela continua pedindo o nome antigo, e so aparece quando a secretaria clica.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -81,6 +81,25 @@ ok(!restos.length, "nenhum dado de demonstracao sobrou na tela", restos.join(", 
 
 ok(app.includes("err.status === 401") && app.includes("err.status === 423"),
    "sessao expirada e turma fechada sao tratadas");
+
+// ---- Windows ----
+// O import() dinamico exige URL, nao caminho. No Linux "/caminho/x.js" ja e
+// uma URL valida e o erro passa despercebido; no Windows "C:\..." vira
+// protocolo "c:" e o Node recusa. Como o servidor da escola e Windows, um
+// import() de caminho quebra em TODA partida. Foi assim que o sistema passou
+// versoes subindo so pelo plano B, sem ninguem perceber.
+const suspeitos = [];
+for (const f of readdirSync(join(raiz, "src")).filter((n) => n.endsWith(".js"))) {
+  const txt = ler("src/" + f);
+  for (const m of txt.matchAll(/\bimport\(\s*([A-Za-z_$][\w$]*)\s*\)/g)) {
+    const decl = new RegExp(`\\b(?:const|let|var)\\s+${m[1]}\\s*=([^;]*)`).exec(txt);
+    if (!decl || !/pathToFileURL|["'`](node:|file:)/.test(decl[1])) {
+      suspeitos.push(`${f}: import(${m[1]})`);
+    }
+  }
+}
+ok(!suspeitos.length, "import() dinamico recebe URL, nao caminho do Windows",
+   suspeitos.join(" | "));
 
 console.log(`\n  ${falhas ? falhas + " falha(s)" : "tudo passou"}\n`);
 process.exit(falhas ? 1 : 0);
