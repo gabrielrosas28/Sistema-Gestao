@@ -53,6 +53,15 @@ rem =====================================================================
 rem  LIGAR
 rem =====================================================================
 
+rem ---------- a porta ja esta ocupada? ----------
+rem  Se o Gestao.bat estiver aberto, ele ja segura a porta 8080. O servico
+rem  subiria por cima, nao conseguiria a porta e morreria -- e o netstat
+rem  continuaria mostrando alguem escutando, entao eu diria "deu certo"
+rem  olhando para o processo errado. Melhor exigir a porta livre.
+set "OCUPADA="
+for /f "tokens=*" %%l in ('netstat -ano ^| findstr /r /c:":%PORTA% .*LISTENING" 2^>nul') do set "OCUPADA=%%l"
+if defined OCUPADA goto ocupada
+
 rem ---------- onde esta o node ----------
 set "NODE="
 for /f "delims=" %%n in ('where node 2^>nul') do if not defined NODE set "NODE=%%n"
@@ -178,6 +187,22 @@ echo   arquivo, atualize, e ligue de novo pelo item [1].
 echo.
 pause
 exit /b 0
+
+:ocupada
+echo   A porta %PORTA% ja esta em uso.
+echo.
+echo   Quase certo que e a janela preta do Gestao.bat, aberta agora.
+echo   Feche ela primeiro e rode este arquivo de novo.
+echo.
+echo   Motivo: o modo sem janela precisa da porta livre para pegar. Se eu
+echo   ligar por cima, o servico morre sem a porta e eu ainda veria alguem
+echo   escutando -- o processo antigo -- e te diria que deu certo.
+echo.
+echo   Quem esta segurando:
+netstat -ano | findstr /r /c:":%PORTA% .*LISTENING"
+echo.
+pause
+exit /b 1
 
 :naosubiu
 echo.

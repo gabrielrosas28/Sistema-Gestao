@@ -1,0 +1,30 @@
+# Como o Git trata a quebra de linha de cada tipo de arquivo.
+# Sem isto ele avisa "LF will be replaced by CRLF" a cada publicação.
+
+# Padrão: o Git decide e normaliza no repositório
+* text=auto
+
+# Arquivos do Windows precisam de CRLF para funcionar.
+# Um .bat com quebra de linha do Linux pode executar comando pela metade.
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+# Código e documentação ficam com LF dentro do repositório
+*.js    text eol=lf
+*.mjs   text eol=lf
+*.json  text eol=lf
+*.sql   text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.md    text eol=lf
+
+# Binários: não mexer
+*.png   binary
+*.xlsx  binary
+*.pdf   binary
+*.db    binary
+
+# CSV exportado pelo sistema da escola vem em Latin-1.
+# Marcado como binário para o Git não tentar converter e estragar os acentos.
+*.csv   binary
+*.CSV   binary

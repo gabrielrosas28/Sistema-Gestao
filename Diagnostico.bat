@@ -30,9 +30,24 @@ if not exist "src\servidor.js" (
 )
 echo   [ok] Arquivos do sistema no lugar
 
-if not exist "node_modules\express" (
-  echo   [x] Componentes NAO instalados
-  echo       Rode o Instalar.bat, ou "npm install" nesta pasta.
+rem Nao basta a pasta node_modules existir. Conferir so o express deixava
+rem passar o caso real: node_modules copiada de outro PC ou tirada de um .zip,
+rem com uma dependencia pela metade. O sistema so reclamava na hora do login.
+set "FALTANDO="
+for %%p in (express bcryptjs cookie-parser xlsx) do (
+  if not exist "node_modules\%%p\package.json" set "FALTANDO=!FALTANDO! %%p"
+)
+if defined FALTANDO (
+  echo   [x] Componentes com problema:!FALTANDO!
+  echo.
+  echo       A pasta node_modules esta incompleta. Isso acontece quando ela
+  echo       e copiada de outro PC ou descompactada de um .zip, em vez de
+  echo       instalada aqui. Os arquivos existem, mas pela metade.
+  echo.
+  echo       Conserto, nesta pasta e com internet no servidor:
+  echo           rmdir /s /q node_modules
+  echo           npm install
+  echo.
   goto fim
 )
 echo   [ok] Componentes instalados

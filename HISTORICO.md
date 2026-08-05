@@ -50,6 +50,9 @@ Junto disso:
   8080 antes de dizer que deu certo, e mostra o fim do log quando não subiu
 - Some o limite de 72 horas do Agendador, que derrubaria o servidor sozinho
   no meio da semana; e a tarefa passa a tentar voltar 3 vezes se travar
+- O `Diagnostico.bat` confere as quatro dependências uma a uma, não só o
+  `express`. Uma `node_modules` copiada de outro PC ou tirada de um `.zip`
+  vem pela metade, e antes isso passava como "componentes instalados"
 - A opção [3] mostra estado da tarefa, último código de saída e fim do log
 - A opção [2] apaga também o `_servico.cmd`
 - Novo `Desinstalar.bat`: tira tudo do servidor — tarefa, firewall, banco,
