@@ -96,14 +96,32 @@ ok(app.includes("err.status === 401") && app.includes("err.status === 423"),
 // protocolo "c:" e o Node recusa. Como o servidor da escola e Windows, um
 // import() de caminho quebra em TODA partida. Foi assim que o sistema passou
 // versoes subindo so pelo plano B, sem ninguem perceber.
+//
+// Os testes entram na varredura junto com o src. Eles tambem rodam no Windows,
+// e um import() de caminho ali nao derruba a escola -- derruba a rede de
+// protecao, que e pior: o teste morre antes da primeira verificacao e o
+// npm run testar para sem ninguem saber o que deixou de ser conferido.
 const suspeitos = [];
-for (const f of readdirSync(join(raiz, "src")).filter((n) => n.endsWith(".js"))) {
-  const txt = ler("src/" + f);
-  for (const m of txt.matchAll(/\bimport\(\s*([A-Za-z_$][\w$]*)\s*\)/g)) {
-    const decl = new RegExp(`\\b(?:const|let|var)\\s+${m[1]}\\s*=([^;]*)`).exec(txt);
-    if (!decl || !/pathToFileURL|["'`](node:|file:)/.test(decl[1])) {
-      suspeitos.push(`${f}: import(${m[1]})`);
+const arquivos = [
+  ...readdirSync(join(raiz, "src")).filter((n) => n.endsWith(".js")).map((n) => "src/" + n),
+  ...readdirSync(join(raiz, "testes")).filter((n) => n.endsWith(".mjs")).map((n) => "testes/" + n)
+];
+for (const f of arquivos) {
+  const txt = ler(f);
+  // Pega o import() inteiro, seja ele um nome, uma string ou uma chamada como
+  // join(raiz, "src", "banco.js") -- que era justamente o caso que escapava.
+  for (const m of txt.matchAll(/\bimport\(\s*([^)]*(?:\([^)]*\))?[^)]*)\)/g)) {
+    const alvo = m[1].trim();
+    if (!alvo) continue;                                 // "import()" solto em comentario
+    if (alvo.includes("${")) continue;                   // texto de mensagem, nao codigo
+    if (/^["'`](node:|file:)/.test(alvo)) continue;      // modulo interno ou URL literal
+    if (/pathToFileURL/.test(alvo)) continue;            // ja convertido na hora
+    const nome = /^[A-Za-z_$][\w$]*$/.test(alvo) ? alvo : null;
+    if (nome) {
+      const decl = new RegExp(`\\b(?:const|let|var)\\s+${nome}\\s*=([^;]*)`).exec(txt);
+      if (decl && /pathToFileURL|["'`](node:|file:)/.test(decl[1])) continue;
     }
+    suspeitos.push(`${f}: import(${alvo})`);
   }
 }
 ok(!suspeitos.length, "import() dinamico recebe URL, nao caminho do Windows",

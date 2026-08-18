@@ -19,7 +19,7 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -57,8 +57,12 @@ async function como(quem, metodo, caminho, corpo) {
 // pessoas entram pelo próprio módulo do sistema, para a senha nascer com o
 // mesmo hash que a tela de entrada espera.
 process.env.DADOS = pastaDados;
-const { rodar, listar } = await import(join(raiz, "src", "banco.js"));
-const { criarUsuario } = await import(join(raiz, "src", "acesso.js"));
+// import() dinâmico pede URL, não caminho: no Windows "C:\..." vira protocolo
+// "c:" e o Node recusa. Mesma regra do src/iniciar.js.
+const urlBanco = pathToFileURL(join(raiz, "src", "banco.js")).href;
+const urlAcesso = pathToFileURL(join(raiz, "src", "acesso.js")).href;
+const { rodar, listar } = await import(urlBanco);
+const { criarUsuario } = await import(urlAcesso);
 
 criarUsuario({ nome: "Dora Coordenadora", email: "dora@escola.br", senha: "senha12345", papel: "coordenacao" });
 criarUsuario({ nome: "Sara Secretária", email: "sara@escola.br", senha: "senha12345", papel: "secretaria" });
