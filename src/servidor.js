@@ -10,13 +10,20 @@ import { networkInterfaces } from "node:os";
 
 import { bd, listar, buscar, rodar, anotar, emBloco, ANO_LETIVO, CAMINHO_BANCO, VERSAO } from "./banco.js";
 import { entrar, sair, exigirLogin, exigirCoordenacao, criarUsuario, trocarSenha } from "./acesso.js";
+import { montarAchados, chaveDoTablet } from "./achados.js";
 
 const aqui = dirname(fileURLToPath(import.meta.url));
 const PORTA = Number(process.env.PORTA || 8080);
 
 const app = express();
-app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
+
+// Achados e perdidos entra ANTES do leitor de JSON abaixo, e a ordem importa:
+// quem lê o corpo primeiro define o tamanho máximo, e o lote que o tablet manda
+// (5 fotos em base64) passa longe do 1 MB que basta para o resto do sistema.
+montarAchados(app);
+
+app.use(express.json({ limit: "1mb" }));
 app.use(express.static(join(aqui, "..", "publico")));
 
 // Erro em rota async não pode derrubar o servidor da secretaria.
@@ -37,7 +44,9 @@ app.post("/api/sessao", rota((req, res) => {
   res.cookie("sessao", r.token, {
     httpOnly: true, sameSite: "lax", maxAge: 30 * 86400e3
   });
-  res.json(r.usuario);
+  // A versão vai junto: sem ela o rodapé do menu mostra "versão undefined" até
+  // alguém recarregar a página e o /api/eu preencher.
+  res.json({ ...r.usuario, versao: VERSAO, ano_letivo: ANO_LETIVO });
 }));
 
 app.delete("/api/sessao", rota((req, res) => {
@@ -48,6 +57,12 @@ app.delete("/api/sessao", rota((req, res) => {
 
 app.get("/api/eu", exigirLogin, (req, res) =>
   res.json({ ...req.usuario, versao: VERSAO, ano_letivo: ANO_LETIVO }));
+
+// A chave que o tablet da portaria usa. Só a coordenação vê, e só quando pede —
+// não vai junto do /api/eu para não ficar no console de todo mundo que abre a
+// aba de rede do navegador.
+app.get("/api/chave-tablet", exigirLogin, exigirCoordenacao, (req, res) =>
+  res.json({ chave: chaveDoTablet() }));
 
 // Daqui para baixo, tudo exige login.
 app.use("/api", exigirLogin);
@@ -72,13 +87,18 @@ app.get("/api/turmas/:id/alunos", rota((req, res) => {
 // eventos e calendário
 // ============================================================
 app.get("/api/eventos", rota((req, res) => {
+  // Evento fechado sai daqui e vai para a lista de arquivados. Ele não some:
+  // continua no calendário, nos relatórios e no histórico — só para de aparecer
+  // na tela de quem lança pagamento, que é onde ele já não serve para nada.
+  const arquivados = req.query.arquivados === "1";
   const eventos = listar(
     `SELECT e.*,
             (SELECT COUNT(*) FROM evento_turmas et WHERE et.evento_id = e.id) AS qtd_turmas
        FROM eventos e
       WHERE e.cancelado = 0 AND e.ano_letivo = ?
+        AND e.fechado_em IS ${arquivados ? "NOT NULL" : "NULL"}
         ${req.query.cobra === "1" ? "AND e.cobra = 1" : ""}
-      ORDER BY e.inicio`, ANO_LETIVO);
+      ORDER BY e.inicio ${arquivados ? "DESC" : ""}`, ANO_LETIVO);
   res.json(eventos.map((e) => ({ ...e, resumo: e.cobra ? resumoDoEvento(e.id) : null })));
 }));
 
@@ -93,6 +113,8 @@ app.get("/api/eventos/:id", rota((req, res) => {
   res.json({
     ...e,
     resumo: e.cobra ? resumoDoEvento(e.id) : null,
+    // Turma dentro de evento fechado aparece fechada mesmo sem fechamento
+    // próprio: fechar o evento tranca todas de uma vez.
     turmas: turmas.map((t) => ({
       ...t,
       fechada: !!turmaFechada(e.id, t.id),
@@ -101,8 +123,11 @@ app.get("/api/eventos/:id", rota((req, res) => {
   });
 }));
 
-// Criar evento é da coordenação — é ele que define quanto a família paga.
-app.post("/api/eventos", exigirCoordenacao, rota((req, res) => {
+// Criar evento é da secretaria e da coordenação. Quem monta a lista da festa
+// junina é quem está no balcão; travar isso na coordenação só criava fila.
+// Mexer no valor depois que já entrou dinheiro, tirar turma e cancelar
+// continuam sendo decisão da coordenação, logo abaixo.
+app.post("/api/eventos", rota((req, res) => {
   const { nome, categoria, inicio, fim, cobra, valor, turmas, observacao } = req.body;
   if (!nome?.trim()) return res.status(400).json({ erro: "Dê um nome ao evento." });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(inicio || ""))
@@ -124,10 +149,11 @@ app.post("/api/eventos", exigirCoordenacao, rota((req, res) => {
 
   const id = emBloco(() => {
     const r = rodar(
-      `INSERT INTO eventos (nome, categoria, inicio, fim, cobra, valor, observacao, ano_letivo, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO eventos (nome, categoria, inicio, fim, cobra, valor, observacao,
+                            ano_letivo, criado_por, criado_por_nome)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       nome.trim(), categoria, inicio, fim || null, cobra ? 1 : 0,
-      valorNum, observacao || null, ANO_LETIVO, req.usuario.id
+      valorNum, observacao || null, ANO_LETIVO, req.usuario.id, req.usuario.nome
     );
     const eventoId = Number(r.lastInsertRowid);
 
@@ -154,6 +180,8 @@ app.post("/api/eventos", exigirCoordenacao, rota((req, res) => {
 app.put("/api/eventos/:id", exigirCoordenacao, rota((req, res) => {
   const e = buscar(`SELECT * FROM eventos WHERE id = ?`, req.params.id);
   if (!e) return res.status(404).json({ erro: "Evento não encontrado." });
+  if (e.fechado_em) return res.status(423).json({
+    erro: `Evento fechado em ${e.fechado_em} por ${e.fechado_por_nome || "alguém"}. Reabra antes de editar.` });
 
   const { nome, categoria, inicio, fim, valor, aplicarValor, turmas, observacao } = req.body;
   if (!nome?.trim()) return res.status(400).json({ erro: "Dê um nome ao evento." });
@@ -221,6 +249,8 @@ app.put("/api/eventos/:id", exigirCoordenacao, rota((req, res) => {
 app.delete("/api/eventos/:id", exigirCoordenacao, rota((req, res) => {
   const e = buscar(`SELECT * FROM eventos WHERE id = ?`, req.params.id);
   if (!e) return res.status(404).json({ erro: "Evento não encontrado." });
+  if (e.fechado_em) return res.status(423).json({
+    erro: "Este evento está fechado. Reabra antes de cancelar." });
   const pagos = buscar(
     `SELECT COUNT(*) AS n FROM v_situacao WHERE evento_id = ? AND situacao = 'pago'`, e.id).n;
   if (pagos) return res.status(409).json({
@@ -301,11 +331,21 @@ app.get("/api/calendario", rota((req, res) => {
 // ============================================================
 app.get("/api/eventos/:id/turmas/:turmaId", rota((req, res) => {
   const { id, turmaId } = req.params;
-  if (!turmaFechada(id, turmaId)) completarParticipacoes(id, turmaId);
+  const evento = buscar(`SELECT fechado_em, fechado_por_nome FROM eventos WHERE id = ?`, id);
+  const eventoFechado = !!evento?.fechado_em;
+
+  // Aluno novo só entra em turma que ainda aceita lançamento.
+  if (!eventoFechado && !turmaFechada(id, turmaId)) completarParticipacoes(id, turmaId);
   const fech = turmaFechada(id, turmaId);
   res.json({
-    fechada: !!fech,
-    fechamento: fech || null,
+    fechada: eventoFechado || !!fech,
+    eventoFechado,
+    fechamento: fech
+      ? { ...fech, fechado_por_nome: fech.quem_fechou }
+      : (eventoFechado
+          ? { fechado_em: evento.fechado_em, fechado_por_nome: evento.fechado_por_nome || "alguém",
+              pelo_evento: true }
+          : null),
     resumo: resumoDoEvento(id, turmaId),
     alunos: listar(
       `SELECT * FROM v_situacao WHERE evento_id = ? AND turma_id = ? ORDER BY aluno`,
@@ -380,8 +420,9 @@ app.post("/api/pagamentos", rota((req, res) => {
   if (valorPago === 0) return res.status(400).json({ erro: "O valor recebido não pode ser zero." });
 
   const r = rodar(
-    `INSERT INTO pagamentos (participacao_id, valor, meio, lancado_por) VALUES (?, ?, ?, ?)`,
-    p.id, valorPago, meio, req.usuario.id);
+    `INSERT INTO pagamentos (participacao_id, valor, meio, lancado_por, lancado_por_nome)
+     VALUES (?, ?, ?, ?, ?)`,
+    p.id, valorPago, meio, req.usuario.id, req.usuario.nome);
   anotar(req.usuario.id, "recebeu pagamento", "pagamento", Number(r.lastInsertRowid),
          { aluno_id: p.aluno_id, valor: valorPago, meio });
   res.status(201).json(buscar(`SELECT * FROM v_situacao WHERE participacao_id = ?`, p.id));
@@ -395,11 +436,46 @@ app.delete("/api/pagamentos/:id", rota((req, res) => {
   if (travada(res, p.evento_id, p.aluno_id)) return;
 
   rodar(`UPDATE pagamentos
-            SET estornado_em = datetime('now','localtime'), estornado_por = ?, motivo_estorno = ?
-          WHERE id = ?`, req.usuario.id, req.body?.motivo || null, pg.id);
+            SET estornado_em = datetime('now','localtime'), estornado_por = ?,
+                estornado_por_nome = ?, motivo_estorno = ?
+          WHERE id = ?`, req.usuario.id, req.usuario.nome, req.body?.motivo || null, pg.id);
   anotar(req.usuario.id, "estornou pagamento", "pagamento", pg.id,
          { valor: pg.valor, motivo: req.body?.motivo });
   res.json(buscar(`SELECT * FROM v_situacao WHERE participacao_id = ?`, p.id));
+}));
+
+// ============================================================
+// fechar e reabrir o evento inteiro
+// ============================================================
+// Fechar turma a turma serve para conferir o caixa de cada uma. Fechar o evento
+// é o passo seguinte: acabou, ninguém mais lança nem estorna nada ali, e ele
+// sai da tela de pagamentos. Não é cancelar nem apagar — o evento continua no
+// calendário, nos relatórios e no histórico, e a coordenação reabre se precisar.
+app.post("/api/eventos/:id/fechamento", exigirCoordenacao, rota((req, res) => {
+  const e = buscar(`SELECT * FROM eventos WHERE id = ?`, req.params.id);
+  if (!e) return res.status(404).json({ erro: "Evento não encontrado." });
+  if (e.cancelado) return res.status(409).json({ erro: "Este evento foi cancelado." });
+  if (e.fechado_em) return res.status(409).json({ erro: "Este evento já está fechado." });
+
+  const resumo = e.cobra ? resumoDoEvento(e.id) : null;
+  rodar(`UPDATE eventos
+            SET fechado_em = datetime('now','localtime'), fechado_por = ?, fechado_por_nome = ?
+          WHERE id = ?`, req.usuario.id, req.usuario.nome, e.id);
+  anotar(req.usuario.id, "fechou evento", "evento", e.id, { nome: e.nome, ...resumo });
+  res.status(201).json(buscar(`SELECT * FROM eventos WHERE id = ?`, e.id));
+}));
+
+app.delete("/api/eventos/:id/fechamento", exigirCoordenacao, rota((req, res) => {
+  const e = buscar(`SELECT * FROM eventos WHERE id = ?`, req.params.id);
+  if (!e) return res.status(404).json({ erro: "Evento não encontrado." });
+  if (!e.fechado_em) return res.status(409).json({ erro: "Este evento não está fechado." });
+
+  // Reabrir o evento devolve as turmas ao estado em que estavam: a que a
+  // secretaria tinha fechado à mão continua fechada, e é reaberta uma a uma.
+  rodar(`UPDATE eventos SET fechado_em = NULL, fechado_por = NULL, fechado_por_nome = NULL
+          WHERE id = ?`, e.id);
+  anotar(req.usuario.id, "reabriu evento", "evento", e.id, { nome: e.nome });
+  res.json(buscar(`SELECT * FROM eventos WHERE id = ?`, e.id));
 }));
 
 // ============================================================
@@ -407,11 +483,15 @@ app.delete("/api/pagamentos/:id", rota((req, res) => {
 // ============================================================
 app.post("/api/fechamentos", exigirCoordenacao, rota((req, res) => {
   const { evento_id, turma_id } = req.body;
+  const ev = buscar(`SELECT fechado_em FROM eventos WHERE id = ?`, evento_id);
+  if (ev?.fechado_em)
+    return res.status(409).json({ erro: "O evento inteiro já está fechado." });
   if (turmaFechada(evento_id, turma_id))
     return res.status(409).json({ erro: "Esta turma já está fechada." });
   const r = rodar(
-    `INSERT INTO fechamentos (evento_id, turma_id, fechado_por) VALUES (?, ?, ?)`,
-    evento_id, turma_id, req.usuario.id);
+    `INSERT INTO fechamentos (evento_id, turma_id, fechado_por, fechado_por_nome)
+     VALUES (?, ?, ?, ?)`,
+    evento_id, turma_id, req.usuario.id, req.usuario.nome);
   anotar(req.usuario.id, "fechou turma", "fechamento", Number(r.lastInsertRowid),
          { evento_id, turma_id, ...resumoDoEvento(evento_id, turma_id) });
   res.status(201).json({ ok: true });
@@ -420,9 +500,12 @@ app.post("/api/fechamentos", exigirCoordenacao, rota((req, res) => {
 app.delete("/api/fechamentos/:eventoId/:turmaId", exigirCoordenacao, rota((req, res) => {
   const f = turmaFechada(req.params.eventoId, req.params.turmaId);
   if (!f) return res.status(404).json({ erro: "Esta turma não está fechada." });
+  const ev = buscar(`SELECT fechado_em, fechado_por_nome FROM eventos WHERE id = ?`, f.evento_id);
+  if (ev?.fechado_em) return res.status(423).json({
+    erro: `O evento inteiro está fechado desde ${ev.fechado_em}. Reabra o evento primeiro.` });
   rodar(`UPDATE fechamentos
-            SET reaberto_em = datetime('now','localtime'), reaberto_por = ?
-          WHERE id = ?`, req.usuario.id, f.id);
+            SET reaberto_em = datetime('now','localtime'), reaberto_por = ?, reaberto_por_nome = ?
+          WHERE id = ?`, req.usuario.id, req.usuario.nome, f.id);
   anotar(req.usuario.id, "reabriu turma", "fechamento", f.id,
          { evento_id: f.evento_id, turma_id: f.turma_id });
   res.json({ ok: true });
@@ -459,7 +542,7 @@ app.get("/api/relatorios/pagamentos", rota((req, res) => {
 // Histórico de quem mexeu no quê — só coordenação.
 app.get("/api/registro", exigirCoordenacao, rota((req, res) => {
   res.json(listar(
-    `SELECT r.*, u.nome AS usuario FROM registro r
+    `SELECT r.*, COALESCE(u.nome, r.usuario_nome) AS usuario FROM registro r
        LEFT JOIN usuarios u ON u.id = r.usuario_id
       ORDER BY r.id DESC LIMIT 300`));
 }));
@@ -519,25 +602,106 @@ app.put("/api/usuarios/:id", exigirCoordenacao, rota((req, res) => {
   res.json(buscar(`SELECT id, nome, email, papel, ativo FROM usuarios WHERE id = ?`, u.id));
 }));
 
+// Excluir de vez quem usa o sistema — não é o mesmo que desativar.
+//
+// Desativar tira o acesso e deixa a linha lá. Excluir apaga a pessoa da tabela.
+// Isso esbarra num problema real: o nome dela está pendurado em pagamento
+// lançado, turma fechada, evento criado e no histórico inteiro. Se o vínculo
+// simplesmente sumisse, um relatório de março passaria a dizer que o dinheiro
+// entrou sem ninguém ter recebido.
+//
+// Então, antes de apagar, o nome é copiado para dentro de cada um desses
+// registros, em texto. O vínculo com a tabela usuarios fica nulo, o histórico
+// continua dizendo "Maria recebeu", e a pessoa some do cadastro de acesso.
+// Isto é sobre quem trabalha na escola — aluno não é tocado aqui.
+app.delete("/api/usuarios/:id", exigirCoordenacao, rota((req, res) => {
+  const u = buscar(`SELECT * FROM usuarios WHERE id = ?`, req.params.id);
+  if (!u) return res.status(404).json({ erro: "Usuário não encontrado." });
+
+  // Apagar a si mesmo derruba a própria sessão no meio da ação.
+  if (u.id === req.usuario.id) return res.status(409).json({
+    erro: "Você não pode excluir a sua própria conta. Peça a outra pessoa da coordenação." });
+
+  // Mesmo motivo de sempre: sem coordenação ativa ninguém reabre turma, e o
+  // sistema fica trancado por fora.
+  if (u.papel === "coordenacao") {
+    const outras = buscar(
+      `SELECT COUNT(*) AS n FROM usuarios
+        WHERE papel = 'coordenacao' AND ativo = 1 AND id <> ?`, u.id).n;
+    if (!outras) return res.status(409).json({
+      erro: "Esta é a única coordenação ativa. Cadastre ou promova outra pessoa antes." });
+  }
+
+  const rastro = emBloco(() => {
+    const pagou = rodar(
+      `UPDATE pagamentos SET lancado_por_nome = COALESCE(lancado_por_nome, ?), lancado_por = NULL
+        WHERE lancado_por = ?`, u.nome, u.id).changes;
+    const estornou = rodar(
+      `UPDATE pagamentos SET estornado_por_nome = COALESCE(estornado_por_nome, ?), estornado_por = NULL
+        WHERE estornado_por = ?`, u.nome, u.id).changes;
+    const fechou = rodar(
+      `UPDATE fechamentos SET fechado_por_nome = COALESCE(fechado_por_nome, ?), fechado_por = NULL
+        WHERE fechado_por = ?`, u.nome, u.id).changes;
+    rodar(
+      `UPDATE fechamentos SET reaberto_por_nome = COALESCE(reaberto_por_nome, ?), reaberto_por = NULL
+        WHERE reaberto_por = ?`, u.nome, u.id);
+    const criou = rodar(
+      `UPDATE eventos SET criado_por_nome = COALESCE(criado_por_nome, ?), criado_por = NULL
+        WHERE criado_por = ?`, u.nome, u.id).changes;
+    rodar(
+      `UPDATE ap_itens SET criado_por_nome = COALESCE(criado_por_nome, ?), criado_por = NULL
+        WHERE criado_por = ?`, u.nome, u.id);
+    rodar(
+      `UPDATE registro SET usuario_nome = COALESCE(usuario_nome, ?), usuario_id = NULL
+        WHERE usuario_id = ?`, u.nome, u.id);
+
+    // As sessões saem sozinhas por ON DELETE CASCADE, mas apagar antes deixa
+    // claro que a pessoa perde o acesso no mesmo instante.
+    rodar(`DELETE FROM sessoes WHERE usuario_id = ?`, u.id);
+    rodar(`DELETE FROM usuarios WHERE id = ?`, u.id);
+    return { pagou, estornou, fechou, criou };
+  })();
+
+  // Anotado depois de apagar, e de propósito: como o vínculo já não existe, o
+  // nome de quem saiu fica guardado no detalhe.
+  anotar(req.usuario.id, "excluiu usuário", "usuario", null,
+         { nome: u.nome, email: u.email, papel: u.papel, ...rastro });
+
+  res.json({ ok: true, ...rastro });
+}));
+
 // ============================================================
 // apoio
 // ============================================================
 function turmaFechada(eventoId, turmaId) {
   return buscar(
-    `SELECT f.*, u.nome AS fechado_por_nome FROM fechamentos f
+    `SELECT f.*, COALESCE(u.nome, f.fechado_por_nome, 'alguém') AS quem_fechou
+       FROM fechamentos f
        LEFT JOIN usuarios u ON u.id = f.fechado_por
       WHERE f.evento_id = ? AND f.turma_id = ? AND f.reaberto_em IS NULL`,
     eventoId, turmaId);
 }
 
-// Bloqueia lançamento em turma fechada, respondendo com um motivo claro.
+// Bloqueia lançamento em turma fechada ou em evento fechado, sempre dizendo
+// qual das duas coisas está travando — "não pode" sem motivo faz a secretaria
+// ligar para a coordenação sem saber o que pedir.
 function travada(res, eventoId, alunoId) {
   const a = buscar(`SELECT turma_id FROM alunos WHERE id = ?`, alunoId);
   if (!a) { res.status(404).json({ erro: "Aluno não encontrado." }); return true; }
+
+  const e = buscar(`SELECT fechado_em, fechado_por_nome FROM eventos WHERE id = ?`, eventoId);
+  if (e?.fechado_em) {
+    res.status(423).json({
+      erro: `Evento fechado em ${e.fechado_em} por ${e.fechado_por_nome || "alguém"}. ` +
+            `A coordenação precisa reabrir o evento para alterar.`
+    });
+    return true;
+  }
+
   const f = turmaFechada(eventoId, a.turma_id);
   if (!f) return false;
   res.status(423).json({
-    erro: `Turma fechada em ${f.fechado_em} por ${f.fechado_por_nome}. A coordenação precisa reabrir para alterar.`
+    erro: `Turma fechada em ${f.fechado_em} por ${f.quem_fechou}. A coordenação precisa reabrir para alterar.`
   });
   return true;
 }

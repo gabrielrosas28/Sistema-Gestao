@@ -5,3 +5,8 @@ dados/
 # Gerado pelo "Rodar sem janela.bat": traz o caminho do Node deste PC,
 # que muda de máquina para máquina.
 _servico.cmd
+
+# Gerado pelo npm install. O projeto nunca versionou lock file: a instalacao
+# no PC da escola usa "npm install" simples, e as quatro dependencias sao
+# estaveis. Se um dia isso mudar, tire esta linha de proposito, num commit so.
+package-lock.json
