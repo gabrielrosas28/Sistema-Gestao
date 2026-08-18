@@ -121,11 +121,17 @@ npm run backup -- "D:\Backups Gestao"
 Pode rodar com o sistema no ar e com gente lançando pagamento — a cópia sai
 íntegra. Guarda as 30 mais recentes.
 
+As fotos do achados e perdidos vão junto, numa pasta `fotos` dentro do destino.
+Ela não é dividida por data de propósito: o nome de cada foto é sorteado e nunca
+se repete, então uma pasta só serve para todas as cópias, e um backup de março
+continua achando a foto de um item que já foi apagado do sistema em agosto.
+
 Para rodar sozinho todo dia: abra o **Agendador de Tarefas** do Windows, crie
 uma tarefa diária às 19h apontando para `C:\Gestao\Backup.bat` com o argumento
 `/auto` (assim ele não fica esperando alguém apertar uma tecla).
 
-Para restaurar: pare o sistema, troque `dados\gestao.db` pela cópia, ligue de novo.
+Para restaurar: pare o sistema, troque `dados\gestao.db` pela cópia e a pasta
+`dados\fotos` pela pasta `fotos` do backup, e ligue de novo.
 
 ---
 
@@ -198,6 +204,36 @@ apenas do 2º ao 5º ano.
 
 ---
 
+## Achados e perdidos
+
+A aba **Achados** mostra o que aparece perdido pela escola, com foto. Quem
+cadastra no dia a dia é o tablet da portaria — ele funciona mesmo sem Wi-Fi e
+sobe tudo quando reconecta. Pela tela do sistema dá para procurar, cadastrar
+alguma coisa que chegou na secretaria, marcar como entregue ao dono e mexer nas
+categorias que o tablet mostra na grade.
+
+**Entregar ao dono** tira o item da lista de quem está esperando. **Encerrar sem
+dono** é para o que ficou meses parado e ninguém procurou: sai da lista e
+continua guardado no registro. **Apagar** some com a foto e o registro para
+sempre, e por isso é só da coordenação.
+
+### Vindo do servidor antigo
+
+Até a 1.3.1 o achados e perdidos era um segundo servidor, na porta 5080.
+**Atualizar o sistema não desliga ele:** os dois ficam no ar lado a lado, e a
+virada acontece quando você quiser. O passo a passo, com o jeito de trazer os
+itens e as fotos que já estão lá, está em
+[docs/MIGRAR-O-ACHADOS.md](docs/MIGRAR-O-ACHADOS.md).
+
+### Se o tablet for trocado ou reinstalado
+
+Em **Ajustes → Tablet da portaria** está a chave que o aparelho usa para se
+identificar no servidor. Quem for gerar o aplicativo precisa dela e do endereço
+deste servidor (o mesmo `http://<ip>:8080` que a secretaria usa). Guarde a chave
+como se fosse senha.
+
+---
+
 ## Quem pode o quê
 
 | Ação | Secretaria | Coordenação |
@@ -206,14 +242,52 @@ apenas do 2º ao 5º ano.
 | Marcar quem participa | sim | sim |
 | Isentar aluno do pagamento | sim | sim |
 | Ver e exportar relatórios | sim | sim |
-| Criar, editar e cancelar evento | não | sim |
+| **Criar evento** | **sim** | sim |
+| Cadastrar e entregar achado | sim | sim |
+| Editar evento (data, valor, turmas) | não | sim |
+| Cancelar evento | não | sim |
 | Fechar e reabrir turma | não | sim |
+| **Fechar e reabrir o evento inteiro** | não | sim |
+| Apagar um achado de vez | não | sim |
 | Editar o calendário letivo | não | sim |
-| Cadastrar quem usa o sistema | não | sim |
+| Cadastrar e excluir quem usa o sistema | não | sim |
 | Ver o histórico de alterações | não | sim |
 
-Quem é da coordenação tem a aba **Ajustes** no menu, com o cadastro de pessoas
-e o calendário letivo. A secretaria não enxerga essa aba.
+A ideia é essa: a secretaria toca o dia, inclusive montando um evento novo. A
+coordenação faz o que é difícil de desfazer.
+
+Quem é da coordenação tem a aba **Ajustes** no menu, com o cadastro de pessoas,
+o calendário letivo e a chave do tablet. A secretaria não enxerga essa aba.
+
+### Fechar o evento
+
+Quando o evento acabou e o caixa já foi conferido, a coordenação clica em
+**Fechar evento**. Ele trava todas as turmas de uma vez, sai da lista de
+Pagamentos e vai para a aba **Arquivados**. Isso não é cancelar nem apagar: o
+evento continua no calendário, continua saindo nos relatórios e continua no
+histórico. Se precisar corrigir alguma coisa, a coordenação reabre.
+
+### Tirar uma turma de um evento
+
+Em **Editar evento** dá para acrescentar e tirar turmas. Turma que já tem
+pagamento lançado aparece com um cadeado e não sai: tirar ela apagaria as
+participações, e com elas o registro de um dinheiro que entrou de verdade. Para
+tirar mesmo assim, estorne os pagamentos daquela turma antes.
+
+### Excluir alguém do sistema
+
+Desmarcar **"pode entrar no sistema"** tira o acesso e mantém a pessoa no
+cadastro — é o certo para quem saiu de férias ou trocou de função. **Excluir do
+sistema** apaga a pessoa de vez, e é da coordenação.
+
+Excluir não apaga o rastro do trabalho dela: os pagamentos que ela lançou, os
+eventos que ela criou e o histórico continuam mostrando o nome. Um relatório de
+março continua dizendo quem recebeu o dinheiro, mesmo que a pessoa tenha saído
+da escola em agosto.
+
+Ninguém consegue se excluir sozinho, e a última coordenação ativa não sai — sem
+ela ninguém reabre turma nem cadastra gente, e o sistema ficaria trancado por
+fora.
 
 Toda ação que mexe em dinheiro fica registrada com nome, data e hora. Pagamento
 estornado **não é apagado**: fica marcado como estornado, com o motivo. Por isso
@@ -228,7 +302,8 @@ um relatório emitido mês passado continua batendo com o que foi impresso na é
 | `npm start` | Liga o sistema |
 | `npm run importar -- "caminho\Exportado.CSV"` | Atualiza turmas e alunos |
 | `npm run criar-usuario` | Cadastra alguém pela linha de comando |
-| `npm run backup` | Faz uma cópia do banco |
+| `npm run backup` | Faz uma cópia do banco e das fotos |
+| `npm run importar-achados -- "caminho\achadosperdidos.db"` | Traz o achados e perdidos do servidor antigo |
 | `npm run testar` | Confere se as regras de pagamento estão de pé (com o sistema ligado) |
 
 ---
@@ -240,10 +315,16 @@ Variáveis opcionais, se precisar:
 | Variável | Para quê | Padrão |
 |---|---|---|
 | `PORTA` | Porta do site | `8080` |
-| `DADOS` | Onde fica o banco | `dados` dentro da pasta |
+| `DADOS` | Onde fica o banco e as fotos | `dados` dentro da pasta |
 | `ANO_LETIVO` | Ano das turmas e eventos | ano atual |
+| `CHAVE_TABLET` | Fixa a chave do tablet em vez de deixar o servidor sortear | sorteada na 1ª partida |
 
 Exemplo: `set PORTA=80 && npm start` deixa o endereço sem o `:8080`.
+
+> **Cuidado ao mudar a `PORTA`.** O tablet da portaria tem o endereço gravado
+> dentro do aplicativo, com a porta. Mudar aqui faz o tablet parar de
+> sincronizar até alguém gerar e instalar um aplicativo novo. Os PCs da
+> administração não se importam — é só digitar o endereço novo.
 
 ---
 

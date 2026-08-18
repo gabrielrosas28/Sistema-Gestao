@@ -64,6 +64,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M16 9.5a3 3 0 1 0 0-4M18 20c0-2.2-.8-3.9-2-5"/></svg>
         Turmas
       </button>
+      <button class="nav__item" data-ir="achados">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 7V5.5A3.5 3.5 0 0 1 15 5.5V7"/><path d="M4.5 7h15l-1 13.5h-13z"/></svg>
+        Achados
+      </button>
       <button class="nav__item somente-coord" data-ir="ajustes">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg>
         Ajustes
@@ -111,6 +115,7 @@
       </div>
       <div class="form-campo">
         <label>Turmas participantes</label>
+        <div class="recado recado--calmo" id="recadoTurmas" hidden></div>
         <div id="turmasEscolha"></div>
       </div>
       <div class="form-campo">
@@ -195,6 +200,7 @@
       </div>
     </div>
     <div class="modal__rodape">
+      <button class="btn btn--fantasma" id="excluirUsuario" style="margin-right:auto;color:var(--vermelho)" hidden>Excluir do sistema</button>
       <button class="btn btn--fantasma" data-fechar>Cancelar</button>
       <button class="btn btn--primario" id="salvarUsuario">Cadastrar</button>
     </div>
@@ -225,6 +231,110 @@
       <button class="btn btn--fantasma" id="apagarPeriodo" style="margin-right:auto;color:var(--vermelho)" hidden>Apagar</button>
       <button class="btn btn--fantasma" data-fechar>Cancelar</button>
       <button class="btn btn--primario" id="salvarPeriodo">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- modal: cadastrar um achado -->
+<div class="cortina" id="cortinaAchado" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="tituloAchado" style="max-width:480px">
+    <div class="modal__topo">
+      <h2 id="tituloAchado">Cadastrar achado</h2>
+      <button class="btn btn--fantasma" style="padding:4px 10px" data-fechar>Fechar</button>
+    </div>
+    <div class="modal__corpo">
+      <div class="recado" id="recadoAchado" hidden></div>
+      <div class="form-campo">
+        <span class="form-rotulo">Foto</span>
+        <label class="foto-area" id="fotoArea">
+          <input type="file" id="apFoto" accept="image/*" capture="environment" hidden>
+          <img id="apPreview" alt="" hidden>
+          <span class="foto-area__vazio" id="fotoVazio">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M8 6l1.5-2h5L16 6"/></svg>
+            Toque para tirar uma foto ou escolher do computador
+          </span>
+        </label>
+        <button class="btn btn--fantasma" id="apTirarFoto" hidden style="align-self:flex-start;padding:5px 12px;font-size:13px">Trocar a foto</button>
+      </div>
+      <div class="form-campo">
+        <label for="apDescricao">O que é</label>
+        <input id="apDescricao" placeholder="Ex.: Lancheira azul do Homem-Aranha" maxlength="500">
+        <span class="ajuda">Descreva do jeito que a criança descreveria. É por aqui que a família vai reconhecer.</span>
+      </div>
+      <div class="form-campo">
+        <label for="apLocal">Onde foi encontrado</label>
+        <input id="apLocal" placeholder="Ex.: Pátio do recreio" maxlength="200">
+      </div>
+      <div class="form-campo">
+        <span class="form-rotulo">Categoria</span>
+        <div class="turmas-escolha" id="apCategorias"></div>
+      </div>
+    </div>
+    <div class="modal__rodape">
+      <button class="btn btn--fantasma" data-fechar>Cancelar</button>
+      <button class="btn btn--primario" id="salvarAchado">Cadastrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- modal: detalhe de um achado -->
+<div class="cortina" id="cortinaItem" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="tituloItem" style="max-width:440px">
+    <div class="modal__topo">
+      <h2 id="tituloItem">Achado</h2>
+      <button class="btn btn--fantasma" style="padding:4px 10px" data-fechar>Fechar</button>
+    </div>
+    <div class="modal__corpo" id="corpoItem"></div>
+    <div class="modal__rodape">
+      <button class="btn btn--fantasma" id="apagarItem" style="margin-right:auto;color:var(--vermelho)">Apagar</button>
+      <button class="btn btn--fantasma" id="encerrarItem">Encerrar sem dono</button>
+      <button class="btn btn--primario" id="entregarItem">Entregar ao dono</button>
+    </div>
+  </div>
+</div>
+
+<!-- modal: categoria do achados e perdidos -->
+<div class="cortina" id="cortinaCategoria" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="tituloCategoria" style="max-width:440px">
+    <div class="modal__topo">
+      <h2 id="tituloCategoria">Nova categoria</h2>
+      <button class="btn btn--fantasma" style="padding:4px 10px" data-fechar>Fechar</button>
+    </div>
+    <div class="modal__corpo">
+      <div class="recado" id="recadoCategoria" hidden></div>
+      <div class="form-campo">
+        <label for="catNome">Nome</label>
+        <input id="catNome" placeholder="Ex.: Óculos" maxlength="100">
+      </div>
+      <div class="form-campo">
+        <span class="form-rotulo">Desenho da categoria</span>
+        <div class="emoji-grade" id="catEmojis"></div>
+        <span class="ajuda">É o que aparece na grade do tablet da portaria.</span>
+      </div>
+      <label class="opcao" id="catAtivaCampo" hidden><input type="checkbox" id="catAtiva">
+        Aparece na hora de cadastrar</label>
+    </div>
+    <div class="modal__rodape">
+      <button class="btn btn--fantasma" data-fechar>Cancelar</button>
+      <button class="btn btn--primario" id="salvarCategoria">Criar</button>
+    </div>
+  </div>
+</div>
+
+<!-- modal: a chave do tablet -->
+<div class="cortina" id="cortinaTablet" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="tituloTablet" style="max-width:460px">
+    <div class="modal__topo">
+      <h2 id="tituloTablet">Chave do tablet da portaria</h2>
+      <button class="btn btn--fantasma" style="padding:4px 10px" data-fechar>Fechar</button>
+    </div>
+    <div class="modal__corpo">
+      <p class="ajuda" style="margin:0">É com ela que o tablet se identifica no servidor. Só precisa
+      digitar de novo se o aparelho for trocado ou reinstalado.</p>
+      <div class="chave" id="chaveTablet">…</div>
+      <button class="btn btn--fantasma" id="copiarChave" style="align-self:flex-start">Copiar</button>
+      <p class="ajuda" style="margin:0">Guarde como se fosse senha: quem tem essa chave consegue
+      cadastrar e apagar achados sem entrar no sistema.</p>
     </div>
   </div>
 </div>

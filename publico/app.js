@@ -28,6 +28,11 @@ let eventoAtual = null, turmaAtual = null, dadosTurma = null;
 let filtro = "todos", busca = "";
 let mesAtual = new Date();
 let turmasNovoEvento = new Set(), catNovoEvento = "comemoracao";
+// Turmas que já receberam pagamento neste evento. Tirar uma delas apagaria o
+// registro de dinheiro que entrou, então a tela nem deixa desmarcar — o
+// servidor também recusa, mas descobrir isso só na hora de salvar é ruim.
+let turmasTravadas = new Set();
+let verArquivados = false;
 let escopoRel = "turma", formatoRel = "pdf";
 
 /* ============================================================
@@ -117,11 +122,17 @@ const conteudo = $("#conteudo"), titulo = $("#titulo"), trilha = $("#trilha");
 const acoesTopo = $("#acoesTopo"), barraTotais = $("#totais");
 
 const TELAS = {};
+// Qual tela está aberta. Serve para o modal de evento saber para onde voltar:
+// quem editou vindo de Pagamentos quer cair de volta em Pagamentos, não no
+// calendário do mês.
+let telaAtual = "inicio";
 
 async function irPara(tela) {
+  telaAtual = tela;
   document.querySelectorAll(".nav__item").forEach((b) => b.removeAttribute("aria-current"));
   const raiz = { inicio: "inicio", calendario: "calendario", eventos: "eventos",
-                 evento: "eventos", pagamentos: "eventos", turmas: "turmas", ajustes: "ajustes" }[tela];
+                 evento: "eventos", pagamentos: "eventos", turmas: "turmas",
+                 achados: "achados", ajustes: "ajustes" }[tela];
   document.querySelector(`.nav__item[data-ir="${raiz}"]`)?.setAttribute("aria-current", "page");
   barraTotais.hidden = true; trilha.hidden = true; trilha.innerHTML = ""; acoesTopo.innerHTML = "";
   window.scrollTo(0, 0);
@@ -199,16 +210,17 @@ function faltam(data) {
 
 const semEventos = () => `<div class="vazio"><h3>Nenhum evento com cobrança</h3>
   <p>Crie um evento para começar a lançar os pagamentos.</p>
-  ${eu.papel === "coordenacao" ? `<button class="btn btn--primario" data-novo>Criar evento</button>` : ""}</div>`;
+  <button class="btn btn--primario" data-novo>Criar evento</button></div>`;
 
-const botaoNovoEvento = () => eu.papel === "coordenacao"
-  ? `<button class="btn btn--primario" data-novo><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>Criar evento</button>`
-  : "";
+// Criar evento é da secretaria e da coordenação. Quem monta a lista da festa
+// junina é quem atende no balcão.
+const botaoNovoEvento = () =>
+  `<button class="btn btn--primario" data-novo><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>Criar evento</button>`;
 
 function linhaEvento(e) {
   const r = e.resumo || { pagos: 0, participam: 0, arrecadado: 0, previsto: 0 };
   const pct = r.participam ? Math.round(r.pagos / r.participam * 100) : 0;
-  return `<button class="evento" data-evento="${e.id}">
+  return `<button class="evento ${e.fechado_em ? "evento--arquivado" : ""}" data-evento="${e.id}">
     <div>
       <div class="evento__nome">${esc(e.nome)}</div>
       <div class="evento__meta">${diaMes(e.inicio)} · ${e.qtd_turmas} ${e.qtd_turmas === 1 ? "turma" : "turmas"} · <b>${brl(e.valor)}</b> por aluno</div>
@@ -227,11 +239,33 @@ function linhaEvento(e) {
    ============================================================ */
 TELAS.eventos = async () => {
   titulo.textContent = "Pagamentos";
-  acoesTopo.innerHTML = botaoNovoEvento();
-  eventos = await pegar("/api/eventos?cobra=1");
+  acoesTopo.innerHTML = verArquivados ? "" : botaoNovoEvento();
+
+  const [abertos, arquivados] = await Promise.all([
+    pegar("/api/eventos?cobra=1"),
+    pegar("/api/eventos?cobra=1&arquivados=1")
+  ]);
+  eventos = verArquivados ? arquivados : abertos;
+
   conteudo.innerHTML = `
-    <div class="secao"><h2>Eventos com cobrança</h2><span class="secao__nota">Clique para ver as turmas</span></div>
-    <div class="eventos">${eventos.length ? eventos.map(linhaEvento).join("") : semEventos()}</div>`;
+    ${arquivados.length ? `<div class="filtros">
+      <button class="chip" data-arquivados="0" aria-pressed="${!verArquivados}">Em andamento <span>${abertos.length}</span></button>
+      <button class="chip" data-arquivados="1" aria-pressed="${verArquivados}">Arquivados <span>${arquivados.length}</span></button>
+    </div>` : ""}
+    <div class="secao"><h2>${verArquivados ? "Eventos arquivados" : "Eventos com cobrança"}</h2>
+      <span class="secao__nota">${verArquivados
+        ? "Fechados pela coordenação. Continuam no calendário e nos relatórios."
+        : "Clique para ver as turmas"}</span></div>
+    <div class="eventos">${eventos.length
+      ? eventos.map(linhaEvento).join("")
+      : (verArquivados ? `<div class="vazio"><h3>Nenhum evento arquivado</h3>
+          <p>Quando um evento terminar, a coordenação pode fechá-lo para tirar da lista de cobrança.</p></div>`
+        : semEventos())}</div>`;
+
+  document.querySelectorAll("[data-arquivados]").forEach((b) => b.onclick = () => {
+    verArquivados = b.dataset.arquivados === "1";
+    irPara("eventos");
+  });
   ligar();
 };
 
@@ -243,7 +277,14 @@ TELAS.evento = async () => {
   titulo.textContent = eventoAtual.nome;
   trilha.hidden = false;
   trilha.innerHTML = `<button data-voltar="eventos">Pagamentos</button> <span>›</span> <span>${esc(eventoAtual.nome)}</span>`;
-  acoesTopo.innerHTML = eventoAtual.cobra ? botaoRelatorio() : "";
+  const podeMexer = eu.papel === "coordenacao" && !eventoAtual.fechado_em;
+  acoesTopo.innerHTML = (eventoAtual.cobra ? botaoRelatorio() : "") +
+    (podeMexer
+      ? `<button class="btn btn--fantasma" data-editar="${eventoAtual.id}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 20h4L19 9a2.5 2.5 0 0 0-3.5-3.5L4.5 16.5z"/></svg>Editar evento</button>`
+      : "") +
+    (podeMexer && eventoAtual.cobra
+      ? `<button class="btn btn--fantasma" data-fecharevento><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="m9 12 2 2 4-4"/></svg>Fechar evento</button>`
+      : "");
 
   const r = eventoAtual.resumo || {};
   const porSegmento = [
@@ -252,6 +293,12 @@ TELAS.evento = async () => {
   ].filter((s) => s.turmas.length);
 
   conteudo.innerHTML = `
+    ${eventoAtual.fechado_em ? `<div class="arquivado">
+      <div class="arquivado__texto"><b>Evento arquivado</b>Fechado em ${dataHora(eventoAtual.fechado_em)} por
+        ${esc(eventoAtual.fechado_por_nome || "—")} · não entra mais pagamento nem estorno.
+        Continua no calendário e nos relatórios.</div>
+      ${eu.papel === "coordenacao" ? `<button class="btn btn--primario" data-reabrirevento>Reabrir evento</button>` : ""}
+    </div>` : ""}
     ${eventoAtual.cobra ? `<div class="fichas" style="grid-template-columns:repeat(3,1fr)">
       <div class="ficha"><div class="ficha__rotulo">Valor por aluno</div><div class="ficha__valor">${brl(eventoAtual.valor)}</div>
         <div class="ficha__nota">${diaMes(eventoAtual.inicio)}${eventoAtual.fim ? " a " + diaMes(eventoAtual.fim) : ""}</div></div>
@@ -550,6 +597,406 @@ TELAS.turmas = async () => {
 /* ============================================================
    ajustes — só a coordenação enxerga
    ============================================================ */
+/* ============================================================
+   achados e perdidos
+   ============================================================ */
+/* O tablet da portaria cadastra e sincroniza; esta tela é onde a secretaria
+   procura, entrega e organiza. Os dados vêm das mesmas rotas que o tablet usa,
+   então os nomes de campo aqui são os do contrato: camelCase, status em número
+   e data em UTC. Ver docs/CONTRATO-TABLET.md. */
+
+// O rótulo curto é o do cartão, onde a largura é apertada; o longo aparece no
+// detalhe, que tem espaço para dizer a coisa por inteiro.
+const SITUACOES = {
+  0: { rotulo: "Esperando dono", curto: "Esperando", classe: "aguardando" },
+  1: { rotulo: "Entregue",       curto: "Entregue",  classe: "devolvido" },
+  2: { rotulo: "Encerrado",      curto: "Encerrado", classe: "expirado" }
+};
+
+// Sugestões de desenho para categoria nova. Cobrem o que mais aparece numa
+// escola de infantil e fundamental I.
+const EMOJIS = ["📘","🎒","🧥","🧸","🎀","👟","🧢","🕶️","☂️","🧤","🍱","🥤","⚽","🎧","📱","🔑","🧴","🩴","👕","🧦","✏️","🎨","📗","🧩"];
+
+let itensAchados = [], categoriasAp = [];
+let abaAchados = "itens", situacaoAchado = "0", categoriaAchado = "", buscaAchado = "";
+
+// Data do servidor vem em UTC sem o Z no fim; sem colar o Z de volta, o
+// navegador leria como hora local e a contagem de dias sairia trocada.
+const dataDoServidor = (iso) => (iso ? new Date(iso.replace(" ", "T") + "Z") : null);
+
+function desdeQuando(iso) {
+  const d = dataDoServidor(iso);
+  if (!d || isNaN(d)) return "";
+  const dias = Math.floor((Date.now() - d.getTime()) / 86400e3);
+  if (dias <= 0) return "hoje";
+  if (dias === 1) return "ontem";
+  if (dias < 30) return `há ${dias} dias`;
+  const meses = Math.floor(dias / 30);
+  return `há ${meses} ${meses === 1 ? "mês" : "meses"}`;
+}
+
+const dataCurta = (iso) => {
+  const d = dataDoServidor(iso);
+  return d && !isNaN(d) ? d.toLocaleDateString("pt-BR") : "—";
+};
+
+// Fallback de desenho para categoria que veio do tablet sem emoji escolhido.
+function emojiDaCategoria(c) {
+  if (c?.emoji) return c.emoji;
+  const n = String(c?.nome || "").toLowerCase();
+  if (/casaco|blusa|agasalho|jaqueta/.test(n)) return "🧥";
+  if (/lancheir|garrafa|copo|marmita/.test(n)) return "🎒";
+  if (/livro|caderno|material|apostila/.test(n)) return "📘";
+  if (/brinquedo|boneca|carrinho/.test(n)) return "🧸";
+  if (/xuxinha|laço|presilha|tiara/.test(n)) return "🎀";
+  if (/sapato|tênis|tenis|sandália|chinelo/.test(n)) return "👟";
+  if (/óculos|oculos/.test(n)) return "🕶️";
+  if (/guarda|chuva|sombrinha/.test(n)) return "☂️";
+  return "📦";
+}
+
+TELAS.achados = async () => {
+  titulo.textContent = "Achados e perdidos";
+  const [itens, cats, resumo] = await Promise.all([
+    pegar("/api/itens"),
+    pegar("/api/categorias?somenteAtivas=false"),
+    pegar("/api/achados/resumo")
+  ]);
+  itensAchados = itens;
+  categoriasAp = cats;
+
+  acoesTopo.innerHTML = abaAchados === "itens"
+    ? `<button class="btn btn--primario" data-novoachado><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>Cadastrar achado</button>`
+    : `<button class="btn btn--primario" data-novacategoria><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>Nova categoria</button>`;
+
+  const parado = resumo.maisAntigo ? desdeQuando(resumo.maisAntigo) : null;
+
+  conteudo.innerHTML = `
+    <div class="fichas">
+      <div class="ficha ficha--destaque"><div class="ficha__rotulo">Esperando dono</div>
+        <div class="ficha__valor">${resumo.aguardando}</div>
+        <div class="ficha__nota">${resumo.na_semana} ${resumo.na_semana === 1 ? "chegou" : "chegaram"} nesta semana</div></div>
+      <div class="ficha ficha--ok"><div class="ficha__rotulo">Já entregues</div>
+        <div class="ficha__valor">${resumo.devolvidos}</div>
+        <div class="ficha__nota">de ${resumo.total} ${resumo.total === 1 ? "cadastro" : "cadastros"} no total</div></div>
+      <div class="ficha"><div class="ficha__rotulo">Parado há mais tempo</div>
+        <div class="ficha__valor" style="font-size:20px">${parado || "—"}</div>
+        <div class="ficha__nota">${parado ? "desde " + dataCurta(resumo.maisAntigo) : "nada esperando"}</div></div>
+      <div class="ficha"><div class="ficha__rotulo">Categorias</div>
+        <div class="ficha__valor">${resumo.categorias}</div>
+        <div class="ficha__nota">na grade do tablet</div></div>
+    </div>
+
+    <div class="filtros">
+      <button class="chip" data-abaachados="itens" aria-pressed="${abaAchados === "itens"}">Na portaria <span>${itens.length}</span></button>
+      <button class="chip" data-abaachados="categorias" aria-pressed="${abaAchados === "categorias"}">Categorias <span>${cats.length}</span></button>
+    </div>
+
+    ${abaAchados === "itens" ? telaItensAchados() : telaCategoriasAchados()}`;
+
+  ligarAchados();
+};
+
+function telaItensAchados() {
+  return `
+    <div class="filtros">
+      <div class="busca">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="buscaAchado" placeholder="Buscar por descrição ou lugar" value="${esc(buscaAchado)}">
+      </div>
+      <button class="chip" data-sit="0">Esperando <span></span></button>
+      <button class="chip" data-sit="1">Entregues <span></span></button>
+      <button class="chip" data-sit="2">Encerrados <span></span></button>
+      <button class="chip" data-sit="">Todos <span></span></button>
+    </div>
+    <div class="filtros" id="filtroCategorias"></div>
+    <div class="achados" id="gradeAchados"></div>`;
+}
+
+function desenharAchados() {
+  const grade = $("#gradeAchados");
+  if (!grade) return;
+
+  const conta = (sit) => itensAchados.filter((i) => sit === "" || String(i.status) === sit).length;
+  document.querySelectorAll("[data-sit]").forEach((b) => {
+    b.setAttribute("aria-pressed", b.dataset.sit === situacaoAchado);
+    b.querySelector("span").textContent = conta(b.dataset.sit);
+  });
+
+  // Só as categorias que aparecem na situação escolhida: filtro que só devolve
+  // lista vazia é filtro que atrapalha.
+  const naSituacao = itensAchados.filter((i) => situacaoAchado === "" || String(i.status) === situacaoAchado);
+  const usadas = categoriasAp.filter((c) => naSituacao.some((i) => i.categoriaId === c.id));
+  $("#filtroCategorias").innerHTML = usadas.length > 1
+    ? `<button class="chip" data-cat="" aria-pressed="${categoriaAchado === ""}">Todas</button>` +
+      usadas.map((c) => `<button class="chip" data-cat="${c.id}" aria-pressed="${categoriaAchado === String(c.id)}">
+        ${emojiDaCategoria(c)} ${esc(c.nome)} <span>${naSituacao.filter((i) => i.categoriaId === c.id).length}</span></button>`).join("")
+    : "";
+  document.querySelectorAll("[data-cat]").forEach((b) => b.onclick = () => {
+    categoriaAchado = b.dataset.cat; desenharAchados();
+  });
+
+  const termo = buscaAchado.trim().toLowerCase();
+  const lista = naSituacao
+    .filter((i) => !categoriaAchado || String(i.categoriaId) === categoriaAchado)
+    .filter((i) => !termo ||
+      `${i.descricao} ${i.localEncontrado || ""} ${i.categoriaNome}`.toLowerCase().includes(termo));
+
+  if (!lista.length) {
+    grade.innerHTML = `<div class="vazio" style="grid-column:1/-1">
+      <h3>${termo || categoriaAchado ? "Nada com esse filtro" : "Nada por aqui"}</h3>
+      <p>${termo || categoriaAchado
+        ? "Tente outra palavra ou limpe os filtros."
+        : "O que a portaria cadastrar no tablet aparece aqui na próxima sincronização."}</p></div>`;
+    return;
+  }
+
+  grade.innerHTML = lista.map((i) => {
+    const cat = categoriasAp.find((c) => c.id === i.categoriaId);
+    const sit = SITUACOES[i.status] || SITUACOES[0];
+    const dias = Math.floor((Date.now() - (dataDoServidor(i.dataCadastro)?.getTime() || Date.now())) / 86400e3);
+    const velho = i.status === 0 && dias >= 60;
+    return `<button class="achado ${i.status === 1 ? "achado--devolvido" : ""} ${velho ? "achado--velho" : ""}"
+              data-achado="${i.id}">
+      <div class="achado__foto">
+        ${i.urlFoto
+          ? `<img src="${esc(i.urlFoto)}" alt="" loading="lazy">`
+          : `<div class="achado__semfoto">${emojiDaCategoria(cat)}</div>`}
+        ${i.urlFoto ? `<span class="achado__emoji">${emojiDaCategoria(cat)}</span>` : ""}
+      </div>
+      <div class="achado__corpo">
+        <div class="achado__nome">${esc(i.descricao)}</div>
+        <div class="achado__meta">${esc(i.localEncontrado || cat?.nome || "")}</div>
+        <div class="achado__rodape">
+          <span class="situacao situacao--${sit.classe}">${sit.curto}</span>
+          <span class="achado__tempo">${desdeQuando(i.dataCadastro)}</span>
+        </div>
+      </div>
+    </button>`;
+  }).join("");
+
+  document.querySelectorAll("[data-achado]").forEach((b) => b.onclick = () =>
+    abrirItem(itensAchados.find((i) => i.id === Number(b.dataset.achado))));
+}
+
+function telaCategoriasAchados() {
+  const contar = (id) => itensAchados.filter((i) => i.categoriaId === id).length;
+  return `<div class="secao"><h2>Categorias</h2>
+      <span class="secao__nota">É a grade que a portaria vê no tablet</span></div>
+    <div class="categorias">${categoriasAp.map((c) => `
+      <button class="categoria ${c.ativa ? "" : "categoria--inativa"}" data-categoria="${c.id}">
+        <span class="categoria__emoji">${emojiDaCategoria(c)}</span>
+        <span>
+          <span class="categoria__nome">${esc(c.nome)}</span>
+          <span class="categoria__nota">${contar(c.id)} ${contar(c.id) === 1 ? "item" : "itens"}${c.ativa ? "" : " · escondida"}</span>
+        </span>
+      </button>`).join("")}</div>
+    <p class="ajuda" style="margin-top:14px">Categoria escondida some da grade do tablet e da hora de cadastrar.
+    Os itens já cadastrados nela continuam aqui.</p>`;
+}
+
+function ligarAchados() {
+  document.querySelectorAll("[data-abaachados]").forEach((b) => b.onclick = () => {
+    abaAchados = b.dataset.abaachados; irPara("achados");
+  });
+  document.querySelectorAll("[data-novoachado]").forEach((b) => b.onclick = () => abrirAchado());
+  document.querySelectorAll("[data-novacategoria]").forEach((b) => b.onclick = () => abrirCategoria());
+  document.querySelectorAll("[data-categoria]").forEach((b) => b.onclick = () =>
+    abrirCategoria(categoriasAp.find((c) => c.id === Number(b.dataset.categoria))));
+
+  const campo = $("#buscaAchado");
+  if (campo) campo.oninput = (e) => { buscaAchado = e.target.value; desenharAchados(); };
+  document.querySelectorAll("[data-sit]").forEach((b) => b.onclick = () => {
+    situacaoAchado = b.dataset.sit; categoriaAchado = ""; desenharAchados();
+  });
+  desenharAchados();
+}
+
+/* ---------- modal: cadastrar achado ---------- */
+let fotoEscolhida = null, categoriaEscolhida = null;
+
+function abrirAchado() {
+  fotoEscolhida = null;
+  categoriaEscolhida = categoriasAp.find((c) => c.ativa)?.id ?? null;
+  $("#recadoAchado").hidden = true;
+  $("#apDescricao").value = "";
+  $("#apLocal").value = "";
+  $("#apFoto").value = "";
+  $("#apPreview").hidden = true;
+  $("#fotoVazio").hidden = false;
+  $("#apTirarFoto").hidden = true;
+
+  const desenhar = () => {
+    $("#apCategorias").innerHTML = categoriasAp.filter((c) => c.ativa).map((c) =>
+      `<button class="turma-chip" data-apcat="${c.id}" aria-pressed="${categoriaEscolhida === c.id}">
+        ${emojiDaCategoria(c)} ${esc(c.nome)}</button>`).join("");
+    $("#apCategorias").querySelectorAll("[data-apcat]").forEach((b) => b.onclick = () => {
+      categoriaEscolhida = Number(b.dataset.apcat); desenhar();
+    });
+  };
+  desenhar();
+
+  $("#apFoto").onchange = (e) => {
+    const arquivo = e.target.files?.[0];
+    if (!arquivo) return;
+    fotoEscolhida = arquivo;
+    // URL local só para a pré-visualização; nada é enviado até salvar.
+    $("#apPreview").src = URL.createObjectURL(arquivo);
+    $("#apPreview").hidden = false;
+    $("#fotoVazio").hidden = true;
+    $("#apTirarFoto").hidden = false;
+  };
+  $("#apTirarFoto").onclick = (e) => { e.preventDefault(); $("#apFoto").click(); };
+
+  $("#salvarAchado").onclick = async () => {
+    const recado = $("#recadoAchado"), botao = $("#salvarAchado");
+    const descricao = $("#apDescricao").value.trim();
+    if (!descricao) {
+      recado.hidden = false; recado.textContent = "Descreva o que foi encontrado.";
+      return;
+    }
+    if (!categoriaEscolhida) {
+      recado.hidden = false; recado.textContent = "Escolha uma categoria.";
+      return;
+    }
+    botao.disabled = true; botao.textContent = "Salvando...";
+    try {
+      // Foto vai em multipart, do mesmo jeito que o tablet manda quando está
+      // online — é a mesma rota, e uma rota só é uma rota a menos para quebrar.
+      const forma = new FormData();
+      forma.append("Descricao", descricao);
+      forma.append("LocalEncontrado", $("#apLocal").value.trim());
+      forma.append("CategoriaId", String(categoriaEscolhida));
+      if (fotoEscolhida) forma.append("foto", fotoEscolhida);
+
+      const r = await fetch("/api/itens", { method: "POST", body: forma });
+      const dados = await r.json().catch(() => null);
+      if (!r.ok) throw new ErroDoServidor(dados?.erro || "Não consegui salvar.", r.status);
+
+      fecharTudo();
+      avisar("Achado cadastrado");
+      irPara("achados");
+    } catch (err) {
+      recado.hidden = false; recado.textContent = err.message;
+    } finally {
+      botao.disabled = false; botao.textContent = "Cadastrar";
+    }
+  };
+
+  $("#cortinaAchado").hidden = false;
+  $("#apDescricao").focus();
+}
+
+/* ---------- modal: detalhe do achado ---------- */
+let itemAberto = null;
+
+function abrirItem(item) {
+  if (!item) return;
+  itemAberto = item;
+  const cat = categoriasAp.find((c) => c.id === item.categoriaId);
+  const sit = SITUACOES[item.status] || SITUACOES[0];
+
+  $("#tituloItem").textContent = item.descricao;
+  $("#corpoItem").innerHTML = `
+    ${item.urlFoto ? `<img class="item-foto" src="${esc(item.urlFoto)}" alt="">` : ""}
+    <div>
+      <div class="item-linha"><span>Situação</span>
+        <span class="situacao situacao--${sit.classe}">${sit.rotulo}</span></div>
+      <div class="item-linha"><span>Categoria</span>
+        <span>${emojiDaCategoria(cat)} ${esc(cat?.nome || item.categoriaNome)}</span></div>
+      <div class="item-linha"><span>Onde achou</span><span>${esc(item.localEncontrado || "não anotado")}</span></div>
+      <div class="item-linha"><span>Chegou em</span><span>${dataCurta(item.dataCadastro)} · ${desdeQuando(item.dataCadastro)}</span></div>
+      ${item.dataDevolucao ? `<div class="item-linha"><span>Entregue em</span><span>${dataCurta(item.dataDevolucao)}</span></div>` : ""}
+      <div class="item-linha"><span>Cadastrado por</span>
+        <span>${item.tabletId ? "tablet da portaria" : "esta tela"}</span></div>
+    </div>`;
+
+  const esperando = item.status === 0;
+  $("#entregarItem").hidden = !esperando;
+  $("#encerrarItem").hidden = !esperando;
+  // Apagar some a foto e o registro para sempre. Fica com a coordenação.
+  $("#apagarItem").hidden = eu.papel !== "coordenacao";
+
+  $("#entregarItem").onclick = () => mudarSituacao(item, 1, `${item.descricao} entregue`);
+  $("#encerrarItem").onclick = () => {
+    if (!confirm(`Encerrar "${item.descricao}" sem dono?\n\nEle sai da lista de quem está esperando ` +
+                 `e fica guardado como encerrado. O registro não se perde.`)) return;
+    mudarSituacao(item, 2, "Item encerrado");
+  };
+  $("#apagarItem").onclick = async () => {
+    if (!confirm(`Apagar "${item.descricao}" de vez?\n\nA foto e o registro somem e não voltam. ` +
+                 `Se o item só não foi procurado, prefira encerrar sem dono.`)) return;
+    try {
+      await apagar(`/api/itens/${item.id}`);
+      fecharTudo();
+      avisar("Achado apagado");
+      irPara("achados");
+    } catch (err) { avisar(err.message, true); }
+  };
+
+  $("#cortinaItem").hidden = false;
+}
+
+async function mudarSituacao(item, status, recado) {
+  try {
+    await api("PATCH", `/api/itens/${item.id}/status`, { status });
+    fecharTudo();
+    avisar(recado);
+    irPara("achados");
+  } catch (err) { avisar(err.message, true); }
+}
+
+/* ---------- modal: categoria do achados ---------- */
+let categoriaEditando = null;
+
+function abrirCategoria(categoria) {
+  categoriaEditando = categoria || null;
+  $("#recadoCategoria").hidden = true;
+  $("#tituloCategoria").textContent = categoria ? "Editar categoria" : "Nova categoria";
+  $("#salvarCategoria").textContent = categoria ? "Salvar" : "Criar";
+  $("#catNome").value = categoria?.nome || "";
+  $("#catAtivaCampo").hidden = !categoria;
+  if (categoria) $("#catAtiva").checked = !!categoria.ativa;
+
+  let emoji = categoria?.emoji || "";
+  const desenhar = () => {
+    $("#catEmojis").innerHTML = EMOJIS.map((e) =>
+      `<button class="emoji-botao" data-emoji="${e}" aria-pressed="${emoji === e}">${e}</button>`).join("");
+    $("#catEmojis").querySelectorAll("[data-emoji]").forEach((b) => b.onclick = () => {
+      // Clicar no que já está escolhido desmarca — dá para voltar ao desenho
+      // automático sem precisar apagar a categoria e criar de novo.
+      emoji = emoji === b.dataset.emoji ? "" : b.dataset.emoji;
+      desenhar();
+    });
+  };
+  desenhar();
+
+  $("#salvarCategoria").onclick = async () => {
+    const recado = $("#recadoCategoria"), botao = $("#salvarCategoria");
+    const nome = $("#catNome").value.trim();
+    if (!nome) { recado.hidden = false; recado.textContent = "Dê um nome à categoria."; return; }
+    botao.disabled = true;
+    try {
+      if (categoria) {
+        await trocar(`/api/categorias/${categoria.id}`, { nome, emoji, ativa: $("#catAtiva").checked });
+        avisar(`${nome} atualizada`);
+      } else {
+        await enviar("/api/categorias", { nome, emoji });
+        avisar(`${nome} criada`);
+      }
+      fecharTudo();
+      irPara("achados");
+    } catch (err) {
+      recado.hidden = false; recado.textContent = err.message;
+    } finally {
+      botao.disabled = false;
+    }
+  };
+
+  $("#cortinaCategoria").hidden = false;
+  $("#catNome").focus();
+}
+
 const TIPOS = { unidade: "Unidade letiva", recesso: "Recesso ou férias", feriado: "Feriado" };
 let abaAjustes = "pessoas";
 
@@ -557,16 +1004,22 @@ TELAS.ajustes = async () => {
   titulo.textContent = "Ajustes";
   const [pessoas, periodos] = await Promise.all([pegar("/api/usuarios"), pegar("/api/periodos")]);
 
-  acoesTopo.innerHTML = abaAjustes === "pessoas"
-    ? `<button class="btn btn--primario" data-nova-pessoa><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>Cadastrar pessoa</button>`
-    : `<button class="btn btn--primario" data-novo-periodo><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>Adicionar período</button>`;
+  acoesTopo.innerHTML =
+    abaAjustes === "pessoas"
+      ? `<button class="btn btn--primario" data-nova-pessoa><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>Cadastrar pessoa</button>`
+    : abaAjustes === "calendario"
+      ? `<button class="btn btn--primario" data-novo-periodo><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>Adicionar período</button>`
+      : "";
 
   conteudo.innerHTML = `
     <div class="filtros">
       <button class="chip" data-aba="pessoas" aria-pressed="${abaAjustes === "pessoas"}">Quem usa o sistema <span>${pessoas.filter((p) => p.ativo).length}</span></button>
       <button class="chip" data-aba="calendario" aria-pressed="${abaAjustes === "calendario"}">Calendário letivo <span>${periodos.length}</span></button>
+      <button class="chip" data-aba="tablet" aria-pressed="${abaAjustes === "tablet"}">Tablet da portaria</button>
     </div>
-    ${abaAjustes === "pessoas" ? listaPessoas(pessoas) : listaPeriodos(periodos)}`;
+    ${abaAjustes === "pessoas" ? listaPessoas(pessoas)
+      : abaAjustes === "calendario" ? listaPeriodos(periodos)
+      : telaTablet()}`;
 
   document.querySelectorAll("[data-aba]").forEach((b) => b.onclick = () => { abaAjustes = b.dataset.aba; irPara("ajustes"); });
   document.querySelectorAll("[data-nova-pessoa]").forEach((b) => b.onclick = () => abrirUsuario());
@@ -575,7 +1028,41 @@ TELAS.ajustes = async () => {
     abrirUsuario(pessoas.find((p) => p.id === Number(b.dataset.pessoa))));
   document.querySelectorAll("[data-periodo]").forEach((b) => b.onclick = () =>
     abrirPeriodo(periodos.find((p) => p.id === Number(b.dataset.periodo))));
+  document.querySelectorAll("[data-chave]").forEach((b) => b.onclick = abrirChaveTablet);
 };
+
+// O tablet da portaria não faz login: ele se identifica por uma chave fixa.
+// Fica aqui porque é a coordenação que reinstala o aparelho quando ele troca.
+function telaTablet() {
+  return `<div class="secao"><h2>Tablet da portaria</h2>
+      <span class="secao__nota">Achados e perdidos</span></div>
+    <div class="vazio" style="text-align:left;padding:26px 24px">
+      <h3>Como o tablet conversa com este servidor</h3>
+      <p style="margin-bottom:18px">O aparelho da portaria cadastra os achados mesmo sem Wi-Fi e sobe tudo
+      quando reconecta. Para isso ele precisa de dois dados: o endereço deste servidor e uma chave.
+      Você só mexe nisso ao trocar ou reinstalar o tablet.</p>
+      <button class="btn btn--primario" data-chave>Ver a chave do tablet</button>
+    </div>`;
+}
+
+function abrirChaveTablet() {
+  const campo = $("#chaveTablet");
+  campo.textContent = "carregando...";
+  $("#cortinaTablet").hidden = false;
+  pegar("/api/chave-tablet")
+    .then((r) => (campo.textContent = r.chave))
+    .catch((err) => (campo.textContent = err.message));
+  $("#copiarChave").onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(campo.textContent);
+      avisar("Chave copiada");
+    } catch {
+      // Navegador antigo ou página sem HTTPS: seleciona para o Ctrl+C manual.
+      getSelection().selectAllChildren(campo);
+      avisar("Selecionada — use Ctrl+C para copiar");
+    }
+  };
+}
 
 function listaPessoas(pessoas) {
   return `<div class="secao"><h2>Quem usa o sistema</h2>
@@ -592,8 +1079,9 @@ function listaPessoas(pessoas) {
         <span class="evento__meta">${p.ativo ? "" : "sem acesso"}</span>
         <svg class="evento__seta" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="m9 6 6 6-6 6"/></svg>
       </button>`).join("")}</div>
-    <p class="ajuda" style="margin-top:14px">A coordenação faz tudo que a secretaria faz, e ainda cria eventos,
-    fecha e reabre turma, edita o calendário e cadastra quem usa o sistema.</p>`;
+    <p class="ajuda" style="margin-top:14px">As duas criam eventos e lançam pagamentos. A coordenação faz
+    ainda o que não tem volta: editar e cancelar evento, fechar e reabrir turma e evento, mexer no
+    calendário e cadastrar ou excluir quem usa o sistema.</p>`;
 }
 
 function listaPeriodos(periodos) {
@@ -636,8 +1124,8 @@ function abrirUsuario(pessoa) {
   let ativo = pessoa ? !!pessoa.ativo : true;
   const desenhar = () => {
     $("#papelEscolha").innerHTML = `
-      ${[["secretaria", "Secretaria", "Lança e estorna pagamentos, marca participação e isenção, exporta relatórios."],
-         ["coordenacao", "Coordenação", "Tudo da secretaria, mais criar eventos, fechar e reabrir turma, editar o calendário e cadastrar pessoas."]]
+      ${[["secretaria", "Secretaria", "Cria eventos, lança e estorna pagamentos, marca participação e isenção, cadastra achados e exporta relatórios."],
+         ["coordenacao", "Coordenação", "Tudo da secretaria, mais editar e cancelar evento, fechar e reabrir turma e evento, editar o calendário e cadastrar ou excluir pessoas."]]
         .map(([id, nome, nota]) => `
         <button class="escolha" data-papel="${id}" aria-pressed="${papel === id}">
           <span class="escolha__marca"></span>
@@ -649,6 +1137,28 @@ function abrirUsuario(pessoa) {
     if (pessoa) $("#usAtivo").onchange = (e) => (ativo = e.target.checked);
   };
   desenhar();
+
+  // Excluir é diferente de tirar o acesso: desmarcar "pode entrar" mantém a
+  // pessoa no cadastro; excluir apaga a linha. O nome dela continua no
+  // histórico e nos pagamentos, senão o relatório de meses atrás passaria a
+  // dizer que o dinheiro entrou sozinho.
+  $("#excluirUsuario").hidden = !pessoa || eu.papel !== "coordenacao" || pessoa?.id === eu.id;
+  $("#excluirUsuario").onclick = async () => {
+    if (!confirm(`Excluir ${pessoa.nome} do sistema?\n\n` +
+                 `A pessoa perde o acesso na hora e some deste cadastro. O nome dela continua ` +
+                 `no histórico e nos pagamentos que ela lançou.\n\n` +
+                 `Se ela só saiu de férias ou trocou de função, desmarque "pode entrar no sistema" ` +
+                 `em vez de excluir.`)) return;
+    const recado = $("#recadoUsuario");
+    try {
+      await apagar(`/api/usuarios/${pessoa.id}`);
+      fecharTudo();
+      avisar(`${pessoa.nome} excluído do sistema`);
+      irPara("ajustes");
+    } catch (err) {
+      recado.hidden = false; recado.textContent = err.message;
+    }
+  };
 
   $("#salvarUsuario").onclick = async () => {
     const recado = $("#recadoUsuario");
@@ -857,6 +1367,29 @@ function ligar() {
     } catch (err) { avisar(err.message, true); }
   });
 
+  document.querySelectorAll("[data-fecharevento]").forEach((b) => b.onclick = async () => {
+    const r = eventoAtual.resumo || {};
+    const aviso = r.pendentes
+      ? `Ainda faltam ${r.pendentes} ${r.pendentes === 1 ? "pagamento" : "pagamentos"} neste evento.\n\n`
+      : "";
+    if (!confirm(`${aviso}Fechar "${eventoAtual.nome}"?\n\nO evento sai da lista de cobrança e vai para ` +
+                 `Arquivados. Ninguém mais lança nem estorna pagamento nele. Ele continua no calendário ` +
+                 `e nos relatórios, e a coordenação pode reabrir depois.`)) return;
+    try {
+      await enviar(`/api/eventos/${eventoAtual.id}/fechamento`);
+      avisar(`${eventoAtual.nome} arquivado`);
+      irPara("evento");
+    } catch (err) { avisar(err.message, true); }
+  });
+
+  document.querySelectorAll("[data-reabrirevento]").forEach((b) => b.onclick = async () => {
+    try {
+      await apagar(`/api/eventos/${eventoAtual.id}/fechamento`);
+      avisar(`${eventoAtual.nome} reaberto`);
+      irPara("evento");
+    } catch (err) { avisar(err.message, true); }
+  });
+
   document.querySelectorAll("[data-reabrir]").forEach((b) => b.onclick = async () => {
     try {
       await apagar(`/api/fechamentos/${eventoAtual.id}/${turmaAtual.id}`);
@@ -888,6 +1421,8 @@ function abrirEvento(evento) {
     $("#evCobra").checked = !!evento.cobra;
     catNovoEvento = evento.categoria;
     turmasNovoEvento = new Set((evento.turmas || []).map((t) => t.id));
+    turmasTravadas = new Set((evento.turmas || [])
+      .filter((t) => (t.resumo?.pagos || 0) > 0).map((t) => t.id));
     abrirEvento.preenchido = true;
   }
   if (!evento) $("#evData").value = $("#evData").value || hojeIso();
@@ -912,19 +1447,40 @@ function abrirEvento(evento) {
         <span style="font-size:12.5px;font-weight:700;color:var(--cinza)">${g.nome}</span>
         <button class="btn btn--fantasma" style="padding:3px 9px;font-size:12px" data-seg="${g.id}">Selecionar todas</button>
       </div>
-      <div class="turmas-escolha">${lista.map((t) =>
-        `<button class="turma-chip" data-t="${t.id}" aria-pressed="${turmasNovoEvento.has(t.id)}">${esc(t.nome)}</button>`).join("")}</div>
+      <div class="turmas-escolha">${lista.map((t) => {
+        const travada = turmasTravadas.has(t.id);
+        return `<button class="turma-chip ${travada ? "turma-chip--travada" : ""}" data-t="${t.id}"
+          aria-pressed="${turmasNovoEvento.has(t.id)}"
+          ${travada ? `data-travada="1" title="Esta turma já tem pagamento lançado"` : ""}
+          >${esc(t.nome)}${travada ? " 🔒" : ""}</button>`;
+      }).join("")}</div>
     </div>`;
   }).join("");
+
+  if (turmasTravadas.size) {
+    $("#recadoTurmas").hidden = false;
+    $("#recadoTurmas").textContent =
+      `${turmasTravadas.size === 1 ? "Uma turma já tem pagamento" : `${turmasTravadas.size} turmas já têm pagamento`} ` +
+      `lançado e por isso não sai do evento. Para tirar, estorne os pagamentos dela primeiro.`;
+  } else {
+    $("#recadoTurmas").hidden = true;
+  }
 
   const caixa = $("#turmasEscolha");
   caixa.querySelectorAll("[data-t]").forEach((b) => b.onclick = () => {
     const id = Number(b.dataset.t);
+    if (turmasTravadas.has(id)) {
+      const t = turmas.find((x) => x.id === id);
+      avisar(`${t?.nome || "Esta turma"} já tem pagamento lançado. Estorne antes de tirar do evento.`, true);
+      return;
+    }
     turmasNovoEvento.has(id) ? turmasNovoEvento.delete(id) : turmasNovoEvento.add(id);
     b.setAttribute("aria-pressed", turmasNovoEvento.has(id));
   });
   caixa.querySelectorAll("[data-seg]").forEach((b) => b.onclick = () => {
-    const lista = turmas.filter((t) => t.segmento === b.dataset.seg);
+    // "Selecionar todas" nunca desmarca uma turma travada: o atalho não pode
+    // fazer pela distração o que o clique direto recusa fazer.
+    const lista = turmas.filter((t) => t.segmento === b.dataset.seg && !turmasTravadas.has(t.id));
     const todas = lista.every((t) => turmasNovoEvento.has(t.id));
     lista.forEach((t) => todas ? turmasNovoEvento.delete(t.id) : turmasNovoEvento.add(t.id));
     abrirEvento(eventoEditando);
@@ -963,9 +1519,11 @@ $("#salvarEvento").onclick = async () => {
       await enviar("/api/eventos", corpo);
       avisar(`"${corpo.nome}" criado`);
     }
+    const voltarPara = editando && (telaAtual === "evento" || telaAtual === "pagamentos")
+      ? "evento" : "calendario";
     fecharEvento();
     mesAtual = new Date(corpo.inicio + "T12:00");
-    irPara("calendario");
+    irPara(voltarPara);
   } catch (err) {
     recado.hidden = false; recado.textContent = err.message;
   } finally {
@@ -992,7 +1550,8 @@ function fecharEvento() {
   $("#cortinaEvento").hidden = true;
   $("#evNome").value = ""; $("#evValor").value = ""; $("#evFim").value = "";
   $("#evCobra").checked = true; $("#evCobra").disabled = false;
-  turmasNovoEvento.clear();
+  turmasNovoEvento.clear(); turmasTravadas.clear();
+  $("#recadoTurmas").hidden = true;
   eventoEditando = null;
   abrirEvento.preenchido = false;
 }
@@ -1134,6 +1693,7 @@ function gerarImpressao(dados, incFora, incResumo, incAssina, soPendentes) {
 function fecharTudo() {
   document.querySelectorAll(".cortina").forEach((c) => (c.hidden = true));
   eventoEditando = null; pessoaEditando = null; periodoEditando = null;
+  categoriaEditando = null; itemAberto = null; fotoEscolhida = null;
   abrirEvento.preenchido = false;
 }
 document.querySelectorAll("[data-fechar]").forEach((b) => b.onclick = fecharTudo);

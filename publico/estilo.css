@@ -389,3 +389,93 @@ body[data-papel="coordenacao"] .agenda__editar{display:grid}
   .agenda__item{grid-template-columns:1fr auto}
   .agenda__abrir{grid-column:1/-1}
 }
+
+/* ============================================================
+   achados e perdidos
+   ============================================================ */
+/* A foto manda aqui. Quem procura uma mochila reconhece a mochila antes de ler
+   qualquer coisa — então o cartão é a imagem, e o texto vem depois. */
+.achados{display:grid;grid-template-columns:repeat(auto-fill,minmax(214px,1fr));gap:14px}
+.achado{background:var(--branco);border-radius:12px;box-shadow:var(--sombra);overflow:hidden;text-align:left;width:100%;display:flex;flex-direction:column;transition:box-shadow .14s,transform .14s}
+.achado:hover{box-shadow:var(--sombra-alta);transform:translateY(-2px)}
+.achado__foto{position:relative;aspect-ratio:4/3;background:var(--azul-claro);overflow:hidden;flex:none}
+.achado__foto img{width:100%;height:100%;object-fit:cover;display:block}
+/* Sem foto o cartão não pode virar um buraco cinza: o emoji da categoria
+   ocupa o lugar e ainda diz do que se trata. */
+.achado__semfoto{width:100%;height:100%;display:grid;place-items:center;font-size:44px;background:
+  radial-gradient(circle at 30% 25%,#fff 0,var(--azul-claro) 70%)}
+.achado__emoji{position:absolute;left:9px;top:9px;width:31px;height:31px;border-radius:9px;background:rgba(255,255,255,.94);display:grid;place-items:center;font-size:17px;box-shadow:0 2px 6px rgba(38,40,95,.22)}
+.achado__corpo{padding:12px 14px 13px;display:flex;flex-direction:column;gap:3px;flex:1}
+.achado__nome{font-family:var(--display);font-size:15px;font-weight:600;letter-spacing:-.015em;line-height:1.25;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.achado__meta{font-size:12px;color:var(--cinza);line-height:1.35}
+.achado__rodape{margin-top:auto;padding-top:9px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.achado__tempo{font-family:var(--mono);font-size:11px;color:var(--cinza);letter-spacing:-.02em;white-space:nowrap}
+.achado--devolvido{opacity:.62}
+.achado--devolvido .achado__foto img{filter:grayscale(1)}
+/* Passou do tempo e ninguém veio buscar: amarelo de atenção, não vermelho de
+   erro — não é erro de ninguém, é só hora de dar um destino. */
+.achado--velho .achado__foto::after{content:"";position:absolute;inset:0;box-shadow:inset 0 -3px 0 var(--amarelo)}
+
+.situacao{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:6px;white-space:nowrap}
+.situacao--aguardando{background:var(--amarelo-fundo);color:var(--ambar)}
+.situacao--devolvido{background:var(--ceu-fundo);color:var(--azul)}
+.situacao--expirado{background:#EEF0F6;color:var(--cinza)}
+
+/* categorias */
+.categorias{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:11px}
+.categoria{background:var(--branco);border-radius:11px;padding:13px 15px;box-shadow:var(--sombra);display:flex;align-items:center;gap:12px;text-align:left;width:100%;transition:box-shadow .14s,transform .14s}
+.categoria:hover{box-shadow:var(--sombra-alta);transform:translateY(-1px)}
+.categoria__emoji{width:40px;height:40px;border-radius:11px;background:var(--papel);display:grid;place-items:center;font-size:21px;flex:none}
+.categoria__nome{display:block;font-family:var(--display);font-size:15px;font-weight:700;letter-spacing:-.015em;line-height:1.2}
+.categoria__nota{display:block;font-size:12px;color:var(--cinza);margin-top:2px}
+.categoria--inativa{opacity:.55}
+
+/* foto no modal de cadastro */
+/* A área é um <label>, e dentro de .form-campo todo label vira etiqueta em
+   CAIXA ALTA. Aqui isso não serve: é frase, não rótulo. */
+/* .form-campo label vence .foto-area no desempate do CSS, então a regra
+   precisa citar os dois — senão a frase continua saindo em CAIXA ALTA. */
+.form-campo .foto-area{display:block;position:relative;border-radius:11px;overflow:hidden;background:var(--papel);
+  box-shadow:inset 0 0 0 2px var(--cinza-linha);cursor:pointer;transition:box-shadow .12s;
+  text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--cinza)}
+.foto-area:hover{box-shadow:inset 0 0 0 2px var(--azul)}
+.foto-area img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}
+/* Vazia ela é uma faixa curta: o modal já tem descrição, lugar e categoria para
+   mostrar, e uma moldura de foto ocupando meia tela empurrava tudo para baixo. */
+.foto-area__vazio{display:flex;align-items:center;gap:12px;padding:16px 18px;text-align:left;line-height:1.35}
+.foto-area__vazio svg{width:26px;height:26px;stroke-width:1.6;color:var(--azul);flex:none}
+
+.emoji-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(42px,1fr));gap:6px}
+.emoji-botao{aspect-ratio:1;border-radius:9px;background:var(--papel);font-size:20px;display:grid;place-items:center;transition:background .1s,box-shadow .1s}
+.emoji-botao:hover{background:var(--azul-claro)}
+.emoji-botao[aria-pressed="true"]{background:var(--ceu-fundo);box-shadow:inset 0 0 0 2px var(--azul)}
+
+/* detalhe do achado */
+.item-foto{width:100%;border-radius:11px;display:block;background:var(--papel)}
+.item-linha{display:flex;justify-content:space-between;gap:14px;font-size:13.5px;padding:7px 0;border-bottom:1px solid var(--cinza-linha)}
+.item-linha:last-child{border-bottom:none}
+.item-linha span:first-child{color:var(--cinza);font-weight:600;font-size:12px;letter-spacing:.05em;text-transform:uppercase}
+.item-linha span:last-child{text-align:right}
+
+/* a chave do tablet */
+.chave{font-family:var(--mono);font-size:13px;background:var(--papel);border-radius:9px;padding:12px 14px;
+  word-break:break-all;line-height:1.6;box-shadow:inset 0 0 0 1px var(--cinza-linha);user-select:all}
+
+/* ---------- evento arquivado ---------- */
+.arquivado{display:flex;align-items:center;gap:13px;background:var(--papel);border-radius:11px;padding:13px 17px;
+  margin-bottom:18px;box-shadow:inset 0 0 0 1px var(--cinza-linha)}
+.arquivado__texto{flex:1;font-size:13.5px;color:var(--cinza)}
+.arquivado__texto b{display:block;font-family:var(--display);font-size:15.5px;color:var(--grafite);font-weight:700;letter-spacing:-.01em}
+.evento--arquivado{opacity:.72}
+
+@media (max-width:760px){
+  .achados{grid-template-columns:repeat(auto-fill,minmax(154px,1fr))}
+}
+
+/* Turma que já recebeu pagamento: fica no evento e não sai daqui. O cadeado é
+   informação, não decoração — sem ele a pessoa clica, nada acontece e ela acha
+   que a tela travou. */
+.turma-chip--travada{box-shadow:inset 0 0 0 1px var(--cinza-linha);cursor:not-allowed}
+.turma-chip--travada[aria-pressed="true"]{background:var(--azul-tinta);color:#fff;opacity:.9}
+.recado--calmo{background:var(--amarelo-fundo);color:var(--ambar);font-weight:500}

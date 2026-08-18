@@ -65,6 +65,15 @@ echo   Conferindo se a versao nova esta coerente...
 call node testes/coerencia.mjs
 if errorlevel 1 goto erro
 
+rem ---------- o banco desta escola aguenta a versao nova? ----------
+rem Monta um banco de mentira no formato antigo, com pagamento e turma
+rem fechada dentro, liga a versao nova em cima e confere real por real.
+rem Nao encosta no banco de verdade: roda tudo numa pasta temporaria.
+echo.
+echo   Conferindo se o banco aguenta a atualizacao...
+call node testes/migracao.mjs
+if errorlevel 1 goto erro
+
 echo.
 echo   =============================================
 echo   Pronto. O banco se ajusta sozinho ao ligar.

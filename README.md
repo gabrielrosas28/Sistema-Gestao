@@ -3,7 +3,7 @@
 Sistema da secretaria: calendário escolar, eventos, pagamentos por turma e
 relatórios. Roda num PC da escola e é aberto pelo navegador dos outros PCs.
 
-**Versão 1.3.0** · 637 alunos · 39 turmas, do Maternalzinho ao 5º ano
+**Versão 1.4.0** · 637 alunos · 39 turmas, do Maternalzinho ao 5º ano
 
 ---
 
@@ -35,12 +35,21 @@ e material, esportes.
 **Pagamentos** — um cartão por aluno, com valor, meio (Pix, cartão, dinheiro)
 e confirmação. Filtros por pendente, pago, isento e não participa.
 
+**Achados e perdidos** — o que aparece perdido pela escola, com foto. O tablet
+da portaria cadastra mesmo sem Wi-Fi e sobe tudo quando reconecta; a secretaria
+procura, entrega ao dono e organiza as categorias por aqui.
+
 **Aluno isento** — participa da atividade sem pagar (bolsista, cortesia,
 combinado com a direção). Sai da conta do "falta receber" e não vira pendente
 eterno. O motivo fica registrado.
 
 **Fechar turma** — trava o lançamento quando a turma está conferida. A
 coordenação reabre quando precisa corrigir.
+
+**Fechar o evento** — quando o evento acabou, a coordenação fecha ele inteiro.
+Trava todas as turmas de uma vez, sai da lista de cobrança e vai para
+*Arquivados*. Não é cancelar nem apagar: continua no calendário, nos relatórios
+e no histórico, e dá para reabrir.
 
 **Relatórios** — documento para imprimir em papel timbrado, com conferência de
 caixa por meio de pagamento, ou planilha `.csv` para o Excel. Escopo: uma
@@ -89,9 +98,12 @@ src/
   banco.js         conexão, atualização automática do esquema
   esquema.sql      tabelas e a visão v_situacao
   acesso.js        login, sessão, papéis
+  achados.js       achados e perdidos: tela do site e sincronização do tablet
+  multipart.js     lê formulário com foto, sem depender de biblioteca
   importar.js      lê Exportado.CSV ou a planilha de boletins
+  importar-achados.js  traz o banco do servidor .NET antigo
   criar-usuario.js primeiro acesso pela linha de comando
-  backup.js        cópia do banco com VACUUM INTO
+  backup.js        cópia do banco e das fotos
   iniciar.js       liga o servidor na versão certa do Node
 publico/
   index.html       uma página só
@@ -102,6 +114,10 @@ testes/
   api.mjs          fluxo principal de ponta a ponta
   qa.mjs           casos de borda
   ajustes.mjs      edição de evento, calendário e pessoas
+  achados.mjs      imita o tablet e confere o contrato com ele
+  permissoes.mjs   quem pode o quê, e o que sobra quando alguém sai
+docs/
+  CONTRATO-TABLET.md  o que não pode mudar nas rotas do tablet
 ```
 
 **Sem framework de front-end e sem build.** A página é servida como está.
@@ -116,14 +132,19 @@ Trocar um arquivo em `publico/` e recarregar o navegador basta.
 | `npm start` | Liga o sistema |
 | `npm run importar -- "caminho\Exportado.CSV"` | Atualiza turmas e alunos |
 | `npm run criar-usuario` | Cadastra alguém pela linha de comando |
-| `npm run backup` | Cópia do banco |
-| `npm run testar` | Roda os quatro conjuntos de teste |
+| `npm run backup` | Cópia do banco e das fotos |
+| `npm run importar-achados -- "caminho\achadosperdidos.db"` | Traz o achados e perdidos do servidor antigo |
+| `npm run testar` | Roda todos os conjuntos de teste |
 
-`npm run testar` precisa do sistema ligado na porta 8099:
+O `api.mjs`, o `qa.mjs` e o `ajustes.mjs` precisam do sistema ligado na porta
+8099, porque falam com o banco de verdade da escola:
 
 ```
 set PORTA=8099 && npm start
 ```
+
+O `coerencia.mjs`, o `achados.mjs` e o `permissoes.mjs` não precisam de nada
+ligado: sobem o próprio servidor num banco descartável e apagam no fim.
 
 ---
 
@@ -134,11 +155,23 @@ set PORTA=8099 && npm start
 | Lançar e estornar pagamento | sim | sim |
 | Marcar participação e isenção | sim | sim |
 | Ver e exportar relatórios | sim | sim |
-| Criar, editar e cancelar evento | não | sim |
+| **Criar evento** | **sim** | sim |
+| Cadastrar e entregar achado | sim | sim |
+| Editar evento (data, valor, turmas) | não | sim |
+| Cancelar evento | não | sim |
 | Fechar e reabrir turma | não | sim |
+| **Fechar e reabrir o evento inteiro** | não | sim |
+| Apagar um achado de vez | não | sim |
 | Editar o calendário letivo | não | sim |
 | Cadastrar quem usa o sistema | não | sim |
+| **Excluir quem usa o sistema** | não | sim |
 | Ver o histórico de alterações | não | sim |
+| Ver a chave do tablet da portaria | não | sim |
+
+A linha divisória é essa: a secretaria faz o trabalho do dia, inclusive montar
+um evento novo. A coordenação faz o que é difícil de desfazer — mexer no valor
+de um evento que já recebeu dinheiro, tirar turma, cancelar, fechar e excluir
+gente.
 
 ---
 

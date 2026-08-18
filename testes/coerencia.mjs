@@ -15,6 +15,9 @@ const app = ler("publico/app.js");
 const html = ler("publico/index.html");
 const css = ler("publico/estilo.css");
 const servidor = ler("src/servidor.js");
+// O achados e perdidos mora num Router à parte, montado no mesmo app. Sem ler
+// este arquivo, toda rota da tela de achados apareceria como orfa aqui.
+const achados = ler("src/achados.js");
 const esquema = ler("src/esquema.sql");
 
 let falhas = 0;
@@ -33,9 +36,11 @@ const semElemento = buscados.filter((i) => !ids.has(i));
 ok(!semElemento.length, "todo elemento buscado pela tela existe", semElemento.join(", ") || buscados.length + " elementos");
 
 // ---- rotas ----
-const rotas = [...servidor.matchAll(/app\.(get|post|put|delete)\("([^"]+)"/g)]
-  .map((m) => ({ metodo: m[1].toUpperCase(), caminho: m[2] }));
-const chamadas = [...app.matchAll(/(pegar|enviar|trocar|apagar|api)\(\s*(?:"(GET|POST|PUT|DELETE)",\s*)?[`"]([^`"]+)/g)]
+const rotas = [
+  ...servidor.matchAll(/app\.(get|post|put|delete|patch)\("([^"]+)"/g),
+  ...achados.matchAll(/achados\.(get|post|put|delete|patch)\("([^"]+)"/g)
+].map((m) => ({ metodo: m[1].toUpperCase(), caminho: m[2] }));
+const chamadas = [...app.matchAll(/(pegar|enviar|trocar|apagar|api)\(\s*(?:"(GET|POST|PUT|DELETE|PATCH)",\s*)?[`"]([^`"]+)/g)]
   .map((m) => ({
     metodo: m[2] || { pegar: "GET", enviar: "POST", trocar: "PUT", apagar: "DELETE" }[m[1]],
     caminho: m[3]
@@ -59,7 +64,10 @@ ok(!semCampo.length, "campos usados nos cartoes existem no banco", semCampo.join
 const meios = [...app.matchAll(/const MEIOS = \{([\s\S]*?)\};/g)][0][1].match(/(\w+):/g).map((s) => s.replace(":", ""));
 ok(meios.every((m) => esquema.includes(`'${m}'`)), "meios de pagamento aceitos pelo banco", meios.join(", "));
 
-const categorias = [...app.matchAll(/^  (\w+):\s+\{ nome:/gm)].map((m) => m[1]);
+// Só o que está dentro do bloco CATEGORIAS. Procurar "algo: { nome:" solto no
+// arquivo inteiro pegava qualquer outro mapa da tela e acusava falha à toa.
+const blocoCategorias = /const CATEGORIAS = \{([\s\S]*?)^\};/m.exec(app)?.[1] || "";
+const categorias = [...blocoCategorias.matchAll(/^  (\w+):\s+\{ nome:/gm)].map((m) => m[1]);
 ok(categorias.length === 6 && categorias.every((c) => esquema.includes(`'${c}'`)),
    "categorias aceitas pelo banco", categorias.join(", "));
 
@@ -88,14 +96,32 @@ ok(app.includes("err.status === 401") && app.includes("err.status === 423"),
 // protocolo "c:" e o Node recusa. Como o servidor da escola e Windows, um
 // import() de caminho quebra em TODA partida. Foi assim que o sistema passou
 // versoes subindo so pelo plano B, sem ninguem perceber.
+//
+// Os testes entram na varredura junto com o src. Eles tambem rodam no Windows,
+// e um import() de caminho ali nao derruba a escola -- derruba a rede de
+// protecao, que e pior: o teste morre antes da primeira verificacao e o
+// npm run testar para sem ninguem saber o que deixou de ser conferido.
 const suspeitos = [];
-for (const f of readdirSync(join(raiz, "src")).filter((n) => n.endsWith(".js"))) {
-  const txt = ler("src/" + f);
-  for (const m of txt.matchAll(/\bimport\(\s*([A-Za-z_$][\w$]*)\s*\)/g)) {
-    const decl = new RegExp(`\\b(?:const|let|var)\\s+${m[1]}\\s*=([^;]*)`).exec(txt);
-    if (!decl || !/pathToFileURL|["'`](node:|file:)/.test(decl[1])) {
-      suspeitos.push(`${f}: import(${m[1]})`);
+const arquivos = [
+  ...readdirSync(join(raiz, "src")).filter((n) => n.endsWith(".js")).map((n) => "src/" + n),
+  ...readdirSync(join(raiz, "testes")).filter((n) => n.endsWith(".mjs")).map((n) => "testes/" + n)
+];
+for (const f of arquivos) {
+  const txt = ler(f);
+  // Pega o import() inteiro, seja ele um nome, uma string ou uma chamada como
+  // join(raiz, "src", "banco.js") -- que era justamente o caso que escapava.
+  for (const m of txt.matchAll(/\bimport\(\s*([^)]*(?:\([^)]*\))?[^)]*)\)/g)) {
+    const alvo = m[1].trim();
+    if (!alvo) continue;                                 // "import()" solto em comentario
+    if (alvo.includes("${")) continue;                   // texto de mensagem, nao codigo
+    if (/^["'`](node:|file:)/.test(alvo)) continue;      // modulo interno ou URL literal
+    if (/pathToFileURL/.test(alvo)) continue;            // ja convertido na hora
+    const nome = /^[A-Za-z_$][\w$]*$/.test(alvo) ? alvo : null;
+    if (nome) {
+      const decl = new RegExp(`\\b(?:const|let|var)\\s+${nome}\\s*=([^;]*)`).exec(txt);
+      if (decl && /pathToFileURL|["'`](node:|file:)/.test(decl[1])) continue;
     }
+    suspeitos.push(`${f}: import(${alvo})`);
   }
 }
 ok(!suspeitos.length, "import() dinamico recebe URL, nao caminho do Windows",

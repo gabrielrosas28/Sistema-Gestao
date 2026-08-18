@@ -11,6 +11,100 @@ Formato `maior.menor.correção`:
 
 ---
 
+## 1.4.0 — 18 de agosto de 2026
+
+**O achados e perdidos veio morar aqui**
+
+O achados e perdidos era um segundo servidor, em .NET, com banco próprio e
+backup próprio, rodando no mesmo PC. Duas coisas para ligar, duas para
+atualizar, duas para lembrar de copiar. Agora é uma aba deste sistema.
+
+- **Aba Achados.** O que aparece perdido pela escola, com foto, filtro por
+  situação e por categoria, entrega ao dono e gestão das categorias que o
+  tablet mostra na grade. Quem entra no sistema já entra nela.
+
+- **O tablet da portaria não percebeu a troca.** As rotas, os nomes de campo e
+  os códigos de resposta são os mesmos do servidor .NET, byte a byte — o app
+  Android continua com o mesmo `SyncRepository`. Mudou o endereço (porta 8080,
+  a mesma da secretaria) e a chave, que agora o servidor sorteia sozinho e
+  mostra em *Ajustes → Tablet da portaria*, em vez de nascer com o valor
+  "TROCAR-ESTA-CHAVE-EM-PRODUCAO" num arquivo de configuração. O que não pode
+  mudar está escrito em `docs/CONTRATO-TABLET.md`, e o `testes/achados.mjs`
+  imita o tablet a cada execução para garantir.
+
+- **Categoria com acento parava a sincronização.** O `COLLATE NOCASE` do
+  SQLite só rebaixa as 26 letras do alfabeto inglês: para ele "Óculos" e
+  "óculos" eram nomes diferentes, e as duas entravam. O tablet compara com o
+  `lowercase()` do Kotlin, que sabe de acento, então via uma categoria só e
+  ficava tentando criar de novo a que já existia. A comparação passou para o
+  JavaScript, que trata acento igual ao Kotlin.
+
+- **O backup não estava levando as fotos.** O `VACUUM INTO` copia o banco, e
+  as fotos moram fora dele. Agora vão junto, espelhadas numa pasta única no
+  destino — trinta cópias do banco não viram trinta cópias das mesmas fotos, e
+  a pasta nunca é limpa, para um backup de março continuar achando a foto de
+  um item apagado em agosto.
+
+**A secretaria passou a criar evento**
+
+Quem monta a lista da festa junina é quem atende no balcão. Travar isso na
+coordenação só criava fila. Editar valor de evento que já recebeu dinheiro,
+tirar turma e cancelar continuam sendo decisão da coordenação.
+
+**Fechar o evento inteiro**
+
+Fechar turma a turma serve para conferir o caixa de cada uma. Fechar o evento é
+o passo seguinte: acabou, ninguém mais lança nem estorna nada ali. Ele sai da
+tela de Pagamentos e vai para *Arquivados*, e continua no calendário, nos
+relatórios e no histórico. Não é cancelar nem apagar. Só a coordenação fecha, e
+só ela reabre.
+
+**Editar as turmas de um evento, com trava onde há dinheiro**
+
+O botão *Editar evento* agora aparece também dentro do evento, não só no
+calendário. Turma que já tem pagamento lançado vem com cadeado e não sai da
+lista — tirar ela apagaria as participações, e com elas o registro de dinheiro
+que entrou de verdade. Para tirar, é preciso estornar antes. O servidor recusa
+de qualquer jeito; o cadeado só evita descobrir isso na hora de salvar.
+
+**Excluir quem usa o sistema, sem perder o rastro do dinheiro**
+
+Antes só dava para desativar. Agora a coordenação exclui de vez, e a linha some
+da tabela. O problema é que o nome dessa pessoa está pendurado em pagamento
+lançado, turma fechada, evento criado e no histórico inteiro — e um relatório
+de março não pode virar "recebido por ninguém" porque alguém saiu da escola em
+agosto.
+
+A saída foi guardar o nome junto do fato, em texto, além do vínculo com a
+tabela. Ao excluir, o nome é copiado para dentro de cada registro e o vínculo
+fica nulo. O histórico continua dizendo "Maria recebeu", e a Maria some do
+cadastro de acesso. Duas colunas precisaram deixar de ser obrigatórias
+(`pagamentos.lancado_por` e `fechamentos.fechado_por`), e o banco se ajusta
+sozinho na primeira partida da versão nova.
+
+Ninguém exclui a si mesmo, e a única coordenação ativa não consegue sair — sem
+ela ninguém reabre turma nem cadastra gente, e o sistema ficaria trancado por
+fora.
+
+**A atualização foi testada contra um banco da versão anterior**
+
+Afrouxar duas colunas que nasceram `NOT NULL` obriga o SQLite a derrubar e
+refazer a tabela — é a coisa mais perigosa que este sistema já fez no banco de
+alguém. E um teste que roda em banco novo não prova nada sobre isso, porque em
+banco novo a reconstrução nem chega a acontecer.
+
+O `testes/migracao.mjs` monta um banco no formato da 1.3.1, com evento aberto,
+pagamento lançado, estorno com motivo e turma fechada e reaberta dentro, liga a
+versão nova em cima e confere real por real: caixa por meio de pagamento, cada
+pagamento campo a campo, os fechamentos, o histórico, o `foreign_key_check` e o
+`integrity_check`. Depois entra pela tela e confere que a turma fechada continua
+travada e que a aberta continua recebendo lançamento.
+
+O `Atualizar.bat` roda esse teste antes de liberar a versão nova. Se ele falhar,
+a atualização para ali e o banco não é tocado.
+
+---
+
 ## 1.3.1 — 4 de agosto de 2026
 
 **O modo sem janela nunca funcionou, e o sistema escondia o motivo**
