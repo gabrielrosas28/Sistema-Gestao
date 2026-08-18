@@ -86,6 +86,23 @@ Ninguém exclui a si mesmo, e a única coordenação ativa não consegue sair �
 ela ninguém reabre turma nem cadastra gente, e o sistema ficaria trancado por
 fora.
 
+**A atualização foi testada contra um banco da versão anterior**
+
+Afrouxar duas colunas que nasceram `NOT NULL` obriga o SQLite a derrubar e
+refazer a tabela — é a coisa mais perigosa que este sistema já fez no banco de
+alguém. E um teste que roda em banco novo não prova nada sobre isso, porque em
+banco novo a reconstrução nem chega a acontecer.
+
+O `testes/migracao.mjs` monta um banco no formato da 1.3.1, com evento aberto,
+pagamento lançado, estorno com motivo e turma fechada e reaberta dentro, liga a
+versão nova em cima e confere real por real: caixa por meio de pagamento, cada
+pagamento campo a campo, os fechamentos, o histórico, o `foreign_key_check` e o
+`integrity_check`. Depois entra pela tela e confere que a turma fechada continua
+travada e que a aberta continua recebendo lançamento.
+
+O `Atualizar.bat` roda esse teste antes de liberar a versão nova. Se ele falhar,
+a atualização para ali e o banco não é tocado.
+
 ---
 
 ## 1.3.1 — 4 de agosto de 2026

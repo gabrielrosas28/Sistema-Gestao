@@ -11,7 +11,7 @@
     "importar-achados": "node --experimental-sqlite --no-warnings src/importar-achados.js",
     "criar-usuario": "node --experimental-sqlite --no-warnings src/criar-usuario.js",
     "backup": "node --experimental-sqlite --no-warnings src/backup.js",
-    "testar": "node testes/coerencia.mjs && node testes/api.mjs && node --experimental-sqlite --no-warnings testes/qa.mjs && node testes/ajustes.mjs && node testes/achados.mjs && node testes/permissoes.mjs"
+    "testar": "node testes/coerencia.mjs && node testes/api.mjs && node --experimental-sqlite --no-warnings testes/qa.mjs && node testes/ajustes.mjs && node testes/achados.mjs && node testes/permissoes.mjs && node testes/migracao.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
