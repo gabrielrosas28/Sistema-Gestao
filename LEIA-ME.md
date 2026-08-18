@@ -217,6 +217,14 @@ dono** é para o que ficou meses parado e ninguém procurou: sai da lista e
 continua guardado no registro. **Apagar** some com a foto e o registro para
 sempre, e por isso é só da coordenação.
 
+### Vindo do servidor antigo
+
+Até a 1.3.1 o achados e perdidos era um segundo servidor, na porta 5080.
+**Atualizar o sistema não desliga ele:** os dois ficam no ar lado a lado, e a
+virada acontece quando você quiser. O passo a passo, com o jeito de trazer os
+itens e as fotos que já estão lá, está em
+[docs/MIGRAR-O-ACHADOS.md](docs/MIGRAR-O-ACHADOS.md).
+
 ### Se o tablet for trocado ou reinstalado
 
 Em **Ajustes → Tablet da portaria** está a chave que o aparelho usa para se
