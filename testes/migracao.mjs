@@ -130,6 +130,30 @@ CREATE TABLE sistema (
   chave TEXT PRIMARY KEY, valor TEXT NOT NULL,
   em TEXT NOT NULL DEFAULT (datetime('now','localtime')));
 INSERT INTO sistema (chave, valor) VALUES ('versao', '1.3.1');
+
+-- A visao tem de estar aqui, e nao so as tabelas.
+--
+-- Um banco que rodou a 1.3.1 tem v_situacao gravada dentro dele, porque o
+-- esquema.sql a cria a cada partida. Sem ela o teste montava um "banco antigo"
+-- que nao existe em escola nenhuma, e deixou passar o erro que derrubou o
+-- servidor: reconstruir a tabela pagamentos faz o SQLite reanalisar o esquema,
+-- e a visao que le pagamentos quebra a analise no meio da troca.
+--
+-- Copia da 1.3.1, sem os campos de isencao que a 1.4.0 acrescenta -- e o
+-- ponto: a visao antiga precisa atrapalhar do jeito que a antiga atrapalha.
+CREATE VIEW v_situacao AS
+SELECT p.id AS participacao_id, p.evento_id, p.aluno_id,
+       a.matricula, a.nome AS aluno, a.turma_id,
+       t.codigo AS turma_codigo, t.nome AS turma,
+       p.participa, p.valor,
+       pg.id AS pagamento_id, pg.meio, pg.recebido_em,
+       CASE WHEN p.participa = 0   THEN 'fora'
+            WHEN pg.id IS NOT NULL THEN 'pago'
+            ELSE 'pendente' END AS situacao
+  FROM participacoes p
+  JOIN alunos a ON a.id = p.aluno_id
+  JOIN turmas t ON t.id = a.turma_id
+  LEFT JOIN pagamentos pg ON pg.participacao_id = p.id AND pg.estornado_em IS NULL;
 `;
 
 const velho = new DatabaseSync(caminhoBanco);

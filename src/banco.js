@@ -89,6 +89,22 @@ function reconstruir(tabela, criar, colunas) {
   bd.exec("PRAGMA foreign_keys = OFF");
   bd.exec("BEGIN");
   try {
+    // As visões precisam sair da frente antes da troca.
+    //
+    // O RENAME faz o SQLite reanalisar o esquema inteiro, visões incluídas. A
+    // v_situacao lê pagamentos, que a essa altura já foi derrubada, e a
+    // reanálise para com "error in view v_situacao: no such table:
+    // main.pagamentos" -- erro que fala de visão quando o problema é ordem.
+    //
+    // Derrubar as visões aqui não custa nada: o esquema.sql as recria a cada
+    // partida, logo abaixo neste mesmo arquivo. E como estamos dentro da
+    // transação, um ROLLBACK devolve todas elas junto com a tabela.
+    //
+    // Isso só aparece em banco que já rodou uma versão anterior -- num banco
+    // novo as visões ainda não existem, e a reconstrução passa direto.
+    for (const v of bd.prepare(`SELECT name FROM sqlite_master WHERE type='view'`).all()) {
+      bd.exec(`DROP VIEW IF EXISTS ${v.name}`);
+    }
     bd.exec(criar.replace(`CREATE TABLE ${tabela}`, `CREATE TABLE _novo_${tabela}`));
     bd.exec(`INSERT INTO _novo_${tabela} (${colunas}) SELECT ${colunas} FROM ${tabela}`);
     bd.exec(`DROP TABLE ${tabela}`);

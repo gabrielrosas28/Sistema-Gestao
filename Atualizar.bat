@@ -26,14 +26,18 @@ if not errorlevel 1 (
 )
 
 rem ---------- backup antes de qualquer coisa ----------
+rem Chama o proprio Backup.bat, e nao "npm run backup" direto, para a copia
+rem cair no MESMO lugar do backup do dia a dia. Sem destino, o npm guarda em
+rem dados\backups -- dentro da pasta do sistema, que e justamente o que nao
+rem serve de plano B. E o caminho fica escrito num arquivo so: mudou la,
+rem mudou aqui.
 echo   Guardando uma copia do banco antes de mexer em nada...
-call npm run backup >nul 2>nul
+call "%~dp0Backup.bat" /auto
 if errorlevel 1 (
   echo   Nao consegui fazer o backup. Atualizacao cancelada por seguranca.
   pause
   exit /b 1
 )
-echo   Copia guardada.
 echo.
 
 rem ---------- versao nova ----------
@@ -46,11 +50,44 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo   Baixando a versao nova...
-call git pull
+rem Qual ramo este servidor segue. O "git pull" sem argumento so funciona se o
+rem ramo tiver upstream configurado; num clone raso, num ramo criado a mao ou
+rem depois de trocar de ramo, ele nao tem, e o Git responde "There is no
+rem tracking information for the current branch" -- que nao diz nada para quem
+rem esta na secretaria e nao tem nada a ver com internet. Dizendo o remoto e o
+rem ramo na propria linha, funciona com upstream ou sem.
+for /f "usebackq delims=" %%b in (`git rev-parse --abbrev-ref HEAD 2^>nul`) do set RAMO=%%b
+
+if not defined RAMO (
+  echo   Esta pasta nao e uma copia do repositorio do sistema, entao nao ha
+  echo   de onde baixar a versao nova. Confira se o Atualizar.bat esta dentro
+  echo   da pasta certa do sistema.
+  echo.
+  pause
+  exit /b 1
+)
+if "%RAMO%"=="HEAD" (
+  echo   O Git desta pasta esta fora de qualquer ramo. Rode uma vez, aqui
+  echo   dentro, o comando abaixo e depois abra o Atualizar.bat de novo:
+  echo.
+  echo     git checkout main
+  echo.
+  pause
+  exit /b 1
+)
+
+echo   Baixando a versao nova do ramo "%RAMO%"...
+call git pull origin %RAMO%
 if errorlevel 1 (
   echo.
-  echo   Nao consegui baixar. Confira a internet do servidor.
+  echo   Nao consegui baixar o ramo "%RAMO%".
+  echo.
+  echo   Costuma ser uma destas tres coisas:
+  echo     - o servidor esta sem internet
+  echo     - o ramo "%RAMO%" ainda nao existe no GitHub
+  echo     - ha alteracao local nesta pasta atrapalhando a mesclagem
+  echo       ^(rode "git status" aqui dentro para ver^)
+  echo.
   pause
   exit /b 1
 )
@@ -85,9 +122,9 @@ exit /b 0
 
 :erro
 echo.
-echo   Algo deu errado. O banco nao foi tocado e a copia de seguranca
-echo   esta em OneDrive\Backups Gestao. Mande o texto desta janela
-echo   para quem acompanha o sistema.
+echo   Algo deu errado. O banco nao foi tocado, e a copia de seguranca esta
+echo   guardada no caminho que apareceu la em cima, no comeco desta janela.
+echo   Mande o texto desta janela para quem acompanha o sistema.
 echo.
 pause
 exit /b 1
