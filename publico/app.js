@@ -1,15 +1,10 @@
-/* ============================================================
-   Gestão — Colégio Santa Chiara
-   Tudo que aparece na tela vem do servidor da escola.
-   ============================================================ */
-
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const brl = (n) => "R$ " + Number(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const primeiro = (n) => String(n || "").split(" ")[0];
 const resto = (n) => String(n || "").split(" ").slice(1).join(" ");
 const diaMes = (s) => (s ? s.slice(8, 10) + "/" + s.slice(5, 7) : "");
-const hojeIso = () => new Date().toLocaleDateString("sv-SE");   // AAAA-MM-DD local
+const hojeIso = () => new Date().toLocaleDateString("sv-SE");
 
 const CATEGORIAS = {
   comemoracao: { nome: "Comemoração", cor: "#FDB92E" },
@@ -22,22 +17,15 @@ const CATEGORIAS = {
 const MEIOS = { pix: "Pix", cartao: "Cartão", dinheiro: "Dinheiro" };
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
-/* ---------- estado ---------- */
 let eu = null, turmas = [], eventos = [];
 let eventoAtual = null, turmaAtual = null, dadosTurma = null;
 let filtro = "todos", busca = "";
 let mesAtual = new Date();
 let turmasNovoEvento = new Set(), catNovoEvento = "comemoracao";
-// Turmas que já receberam pagamento neste evento. Tirar uma delas apagaria o
-// registro de dinheiro que entrou, então a tela nem deixa desmarcar — o
-// servidor também recusa, mas descobrir isso só na hora de salvar é ruim.
 let turmasTravadas = new Set();
 let verArquivados = false;
 let escopoRel = "turma", formatoRel = "pdf";
 
-/* ============================================================
-   conversa com o servidor
-   ============================================================ */
 class ErroDoServidor extends Error {
   constructor(mensagem, status) { super(mensagem); this.status = status; }
 }
@@ -55,9 +43,6 @@ async function api(metodo, caminho, corpo) {
   }
   let dados = null;
   try { dados = await r.json(); } catch {}
-  // O 401 da própria tela de entrada é senha errada, não sessão vencida.
-  // Tratar os dois igual mandava quem errou a senha para "sessão expirou",
-  // que não diz nada sobre o que a pessoa precisa fazer.
   const ehLogin = caminho === "/api/sessao" && metodo === "POST";
   if (r.status === 401 && !ehLogin) {
     mostrarEntrada("Sua sessão expirou. Entre de novo.");
@@ -72,9 +57,6 @@ const enviar = (c, corpo) => api("POST", c, corpo);
 const trocar = (c, corpo) => api("PUT", c, corpo);
 const apagar = (c, corpo) => api("DELETE", c, corpo);
 
-/* ============================================================
-   entrada
-   ============================================================ */
 function mostrarEntrada(recado) {
   eu = null;
   $("#telaApp").hidden = true;
@@ -115,16 +97,10 @@ async function abrirSistema() {
   irPara("inicio");
 }
 
-/* ============================================================
-   navegação
-   ============================================================ */
 const conteudo = $("#conteudo"), titulo = $("#titulo"), trilha = $("#trilha");
 const acoesTopo = $("#acoesTopo"), barraTotais = $("#totais");
 
 const TELAS = {};
-// Qual tela está aberta. Serve para o modal de evento saber para onde voltar:
-// quem editou vindo de Pagamentos quer cair de volta em Pagamentos, não no
-// calendário do mês.
 let telaAtual = "inicio";
 
 async function irPara(tela) {
@@ -148,7 +124,6 @@ async function irPara(tela) {
 
 document.querySelectorAll(".nav__item").forEach((b) => b.onclick = () => irPara(b.dataset.ir));
 
-/* ---------- avisos ---------- */
 let avisoTimer;
 function avisar(texto, erro) {
   const el = $("#aviso");
@@ -159,9 +134,6 @@ function avisar(texto, erro) {
   avisoTimer = setTimeout(() => (el.hidden = true), erro ? 5200 : 3200);
 }
 
-/* ============================================================
-   início
-   ============================================================ */
 TELAS.inicio = async () => {
   titulo.textContent = saudacao();
   acoesTopo.innerHTML = botaoNovoEvento();
@@ -212,8 +184,6 @@ const semEventos = () => `<div class="vazio"><h3>Nenhum evento com cobrança</h3
   <p>Crie um evento para começar a lançar os pagamentos.</p>
   <button class="btn btn--primario" data-novo>Criar evento</button></div>`;
 
-// Criar evento é da secretaria e da coordenação. Quem monta a lista da festa
-// junina é quem atende no balcão.
 const botaoNovoEvento = () =>
   `<button class="btn btn--primario" data-novo><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>Criar evento</button>`;
 
@@ -234,9 +204,6 @@ function linhaEvento(e) {
   </button>`;
 }
 
-/* ============================================================
-   lista de eventos
-   ============================================================ */
 TELAS.eventos = async () => {
   titulo.textContent = "Pagamentos";
   acoesTopo.innerHTML = verArquivados ? "" : botaoNovoEvento();
@@ -269,9 +236,6 @@ TELAS.eventos = async () => {
   ligar();
 };
 
-/* ============================================================
-   evento: turmas
-   ============================================================ */
 TELAS.evento = async () => {
   eventoAtual = await pegar(`/api/eventos/${eventoAtual.id}`);
   titulo.textContent = eventoAtual.nome;
@@ -313,7 +277,6 @@ TELAS.evento = async () => {
         const rt = t.resumo || {};
         const pct = rt.participam ? Math.round(rt.pagos / rt.participam * 100) : 0;
         const completa = rt.participam > 0 && rt.pendentes === 0;
-        // Evento sem cobrança não tem o que lançar: o cartão não é clicável.
         const abre = eventoAtual.cobra;
         return `<${abre ? "button" : "div"} class="turma" ${abre ? `data-turma="${t.id}"` : ""}>
           <div class="turma__nome">${esc(t.nome)}</div>
@@ -329,9 +292,6 @@ TELAS.evento = async () => {
 const botaoRelatorio = () =>
   `<button class="btn btn--fantasma" data-relatorio><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M4 17v3h16v-3"/></svg>Exportar relatório</button>`;
 
-/* ============================================================
-   pagamentos da turma
-   ============================================================ */
 TELAS.pagamentos = async () => {
   dadosTurma = await pegar(`/api/eventos/${eventoAtual.id}/turmas/${turmaAtual.id}`);
   titulo.textContent = turmaAtual.nome;
@@ -452,7 +412,6 @@ function canhoto(a, travada) {
   </article>`;
 }
 
-/* Guarda o meio escolhido antes de confirmar (ainda não foi ao servidor). */
 const meioEscolhido = new Map();
 
 function ligarCanhoto(a, alvo) {
@@ -468,7 +427,7 @@ function ligarCanhoto(a, alvo) {
     } catch (err) {
       if (err.status !== 401) avisar(err.message, true);
       el.classList.remove("canhoto--salvando");
-      if (err.status === 423) irPara("pagamentos");   // alguém fechou a turma agora
+      if (err.status === 423) irPara("pagamentos");
     }
   };
 
@@ -520,8 +479,6 @@ function ligarCanhoto(a, alvo) {
     comSalvamento(() => apagar(`/api/pagamentos/${a.pagamento_id}`, { motivo: "estornado pela tela" }));
   });
 
-  // Salva o valor sem redesenhar a tela. Redesenhar aqui derrubaria o clique
-  // de quem digita o valor e vai direto para "Confirmar pagamento".
   el.querySelector("[data-valor]")?.addEventListener("change", async () => {
     const valor = lerValor(el);
     if (valor === null) { avisar("Confira o valor: use só números.", true); desenharCanhotos(); return; }
@@ -572,9 +529,6 @@ function atualizarTotais() {
   ligar();
 }
 
-/* ============================================================
-   turmas
-   ============================================================ */
 TELAS.turmas = async () => {
   titulo.textContent = "Turmas";
   turmas = await pegar("/api/turmas");
@@ -594,34 +548,17 @@ TELAS.turmas = async () => {
       </div>`).join("")}</div>`).join("");
 };
 
-/* ============================================================
-   ajustes — só a coordenação enxerga
-   ============================================================ */
-/* ============================================================
-   achados e perdidos
-   ============================================================ */
-/* O tablet da portaria cadastra e sincroniza; esta tela é onde a secretaria
-   procura, entrega e organiza. Os dados vêm das mesmas rotas que o tablet usa,
-   então os nomes de campo aqui são os do contrato: camelCase, status em número
-   e data em UTC. Ver docs/CONTRATO-TABLET.md. */
-
-// O rótulo curto é o do cartão, onde a largura é apertada; o longo aparece no
-// detalhe, que tem espaço para dizer a coisa por inteiro.
 const SITUACOES = {
   0: { rotulo: "Esperando dono", curto: "Esperando", classe: "aguardando" },
   1: { rotulo: "Entregue",       curto: "Entregue",  classe: "devolvido" },
   2: { rotulo: "Encerrado",      curto: "Encerrado", classe: "expirado" }
 };
 
-// Sugestões de desenho para categoria nova. Cobrem o que mais aparece numa
-// escola de infantil e fundamental I.
 const EMOJIS = ["📘","🎒","🧥","🧸","🎀","👟","🧢","🕶️","☂️","🧤","🍱","🥤","⚽","🎧","📱","🔑","🧴","🩴","👕","🧦","✏️","🎨","📗","🧩"];
 
 let itensAchados = [], categoriasAp = [];
 let abaAchados = "itens", situacaoAchado = "0", categoriaAchado = "", buscaAchado = "";
 
-// Data do servidor vem em UTC sem o Z no fim; sem colar o Z de volta, o
-// navegador leria como hora local e a contagem de dias sairia trocada.
 const dataDoServidor = (iso) => (iso ? new Date(iso.replace(" ", "T") + "Z") : null);
 
 function desdeQuando(iso) {
@@ -640,7 +577,6 @@ const dataCurta = (iso) => {
   return d && !isNaN(d) ? d.toLocaleDateString("pt-BR") : "—";
 };
 
-// Fallback de desenho para categoria que veio do tablet sem emoji escolhido.
 function emojiDaCategoria(c) {
   if (c?.emoji) return c.emoji;
   const n = String(c?.nome || "").toLowerCase();
@@ -723,8 +659,6 @@ function desenharAchados() {
     b.querySelector("span").textContent = conta(b.dataset.sit);
   });
 
-  // Só as categorias que aparecem na situação escolhida: filtro que só devolve
-  // lista vazia é filtro que atrapalha.
   const naSituacao = itensAchados.filter((i) => situacaoAchado === "" || String(i.status) === situacaoAchado);
   const usadas = categoriasAp.filter((c) => naSituacao.some((i) => i.categoriaId === c.id));
   $("#filtroCategorias").innerHTML = usadas.length > 1
@@ -812,7 +746,6 @@ function ligarAchados() {
   desenharAchados();
 }
 
-/* ---------- modal: cadastrar achado ---------- */
 let fotoEscolhida = null, categoriaEscolhida = null;
 
 function abrirAchado() {
@@ -840,7 +773,6 @@ function abrirAchado() {
     const arquivo = e.target.files?.[0];
     if (!arquivo) return;
     fotoEscolhida = arquivo;
-    // URL local só para a pré-visualização; nada é enviado até salvar.
     $("#apPreview").src = URL.createObjectURL(arquivo);
     $("#apPreview").hidden = false;
     $("#fotoVazio").hidden = true;
@@ -861,8 +793,6 @@ function abrirAchado() {
     }
     botao.disabled = true; botao.textContent = "Salvando...";
     try {
-      // Foto vai em multipart, do mesmo jeito que o tablet manda quando está
-      // online — é a mesma rota, e uma rota só é uma rota a menos para quebrar.
       const forma = new FormData();
       forma.append("Descricao", descricao);
       forma.append("LocalEncontrado", $("#apLocal").value.trim());
@@ -887,7 +817,6 @@ function abrirAchado() {
   $("#apDescricao").focus();
 }
 
-/* ---------- modal: detalhe do achado ---------- */
 let itemAberto = null;
 
 function abrirItem(item) {
@@ -914,7 +843,6 @@ function abrirItem(item) {
   const esperando = item.status === 0;
   $("#entregarItem").hidden = !esperando;
   $("#encerrarItem").hidden = !esperando;
-  // Apagar some a foto e o registro para sempre. Fica com a coordenação.
   $("#apagarItem").hidden = eu.papel !== "coordenacao";
 
   $("#entregarItem").onclick = () => mudarSituacao(item, 1, `${item.descricao} entregue`);
@@ -946,7 +874,6 @@ async function mudarSituacao(item, status, recado) {
   } catch (err) { avisar(err.message, true); }
 }
 
-/* ---------- modal: categoria do achados ---------- */
 let categoriaEditando = null;
 
 function abrirCategoria(categoria) {
@@ -963,8 +890,6 @@ function abrirCategoria(categoria) {
     $("#catEmojis").innerHTML = EMOJIS.map((e) =>
       `<button class="emoji-botao" data-emoji="${e}" aria-pressed="${emoji === e}">${e}</button>`).join("");
     $("#catEmojis").querySelectorAll("[data-emoji]").forEach((b) => b.onclick = () => {
-      // Clicar no que já está escolhido desmarca — dá para voltar ao desenho
-      // automático sem precisar apagar a categoria e criar de novo.
       emoji = emoji === b.dataset.emoji ? "" : b.dataset.emoji;
       desenhar();
     });
@@ -1031,8 +956,6 @@ TELAS.ajustes = async () => {
   document.querySelectorAll("[data-chave]").forEach((b) => b.onclick = abrirChaveTablet);
 };
 
-// O tablet da portaria não faz login: ele se identifica por uma chave fixa.
-// Fica aqui porque é a coordenação que reinstala o aparelho quando ele troca.
 function telaTablet() {
   return `<div class="secao"><h2>Tablet da portaria</h2>
       <span class="secao__nota">Achados e perdidos</span></div>
@@ -1057,7 +980,6 @@ function abrirChaveTablet() {
       await navigator.clipboard.writeText(campo.textContent);
       avisar("Chave copiada");
     } catch {
-      // Navegador antigo ou página sem HTTPS: seleciona para o Ctrl+C manual.
       getSelection().selectAllChildren(campo);
       avisar("Selecionada — use Ctrl+C para copiar");
     }
@@ -1103,7 +1025,6 @@ function listaPeriodos(periodos) {
       </button>`).join("")}</div>`).join("");
 }
 
-/* ---------- modal: pessoa ---------- */
 let pessoaEditando = null;
 
 function abrirUsuario(pessoa) {
@@ -1138,10 +1059,6 @@ function abrirUsuario(pessoa) {
   };
   desenhar();
 
-  // Excluir é diferente de tirar o acesso: desmarcar "pode entrar" mantém a
-  // pessoa no cadastro; excluir apaga a linha. O nome dela continua no
-  // histórico e nos pagamentos, senão o relatório de meses atrás passaria a
-  // dizer que o dinheiro entrou sozinho.
   $("#excluirUsuario").hidden = !pessoa || eu.papel !== "coordenacao" || pessoa?.id === eu.id;
   $("#excluirUsuario").onclick = async () => {
     if (!confirm(`Excluir ${pessoa.nome} do sistema?\n\n` +
@@ -1190,7 +1107,6 @@ function abrirUsuario(pessoa) {
   $(pessoa ? "#usNome" : "#usNome").focus();
 }
 
-/* ---------- modal: período do calendário ---------- */
 let periodoEditando = null;
 
 function abrirPeriodo(periodo) {
@@ -1242,9 +1158,6 @@ function abrirPeriodo(periodo) {
   $("#peNome").focus();
 }
 
-/* ============================================================
-   calendário
-   ============================================================ */
 TELAS.calendario = async () => {
   titulo.textContent = "Calendário escolar";
   acoesTopo.innerHTML = botaoNovoEvento();
@@ -1333,9 +1246,6 @@ const somarDia = (iso) => {
   return d.toLocaleDateString("sv-SE");
 };
 
-/* ============================================================
-   cliques comuns
-   ============================================================ */
 function ligar() {
   document.querySelectorAll("[data-evento]").forEach((b) => b.onclick = () => {
     eventoAtual = { id: Number(b.dataset.evento) };
@@ -1343,7 +1253,7 @@ function ligar() {
   });
   document.querySelectorAll("[data-turma]").forEach((b) => b.onclick = () => {
     turmaAtual = eventoAtual.turmas.find((t) => t.id === Number(b.dataset.turma));
-    busca = ""; filtro = "todos";      // turma nova começa com a lista limpa
+    busca = ""; filtro = "todos";
     irPara("pagamentos");
   });
   document.querySelectorAll("[data-voltar]").forEach((b) => b.onclick = () => irPara(b.dataset.voltar));
@@ -1399,9 +1309,6 @@ function ligar() {
   });
 }
 
-/* ============================================================
-   modal: criar e editar evento
-   ============================================================ */
 let eventoEditando = null;
 
 function abrirEvento(evento) {
@@ -1411,7 +1318,7 @@ function abrirEvento(evento) {
   $("#salvarEvento").textContent = evento ? "Salvar alterações" : "Criar evento";
   $("#cancelarEvento").hidden = !evento;
   $("#campoAplicar").hidden = !evento;
-  $("#evCobra").disabled = !!evento;   // virar cobrado depois mexeria em todo mundo
+  $("#evCobra").disabled = !!evento;
 
   if (evento && !abrirEvento.preenchido) {
     $("#evNome").value = evento.nome;
@@ -1478,8 +1385,6 @@ function abrirEvento(evento) {
     b.setAttribute("aria-pressed", turmasNovoEvento.has(id));
   });
   caixa.querySelectorAll("[data-seg]").forEach((b) => b.onclick = () => {
-    // "Selecionar todas" nunca desmarca uma turma travada: o atalho não pode
-    // fazer pela distração o que o clique direto recusa fazer.
     const lista = turmas.filter((t) => t.segmento === b.dataset.seg && !turmasTravadas.has(t.id));
     const todas = lista.every((t) => turmasNovoEvento.has(t.id));
     lista.forEach((t) => todas ? turmasNovoEvento.delete(t.id) : turmasNovoEvento.add(t.id));
@@ -1556,9 +1461,6 @@ function fecharEvento() {
   abrirEvento.preenchido = false;
 }
 
-/* ============================================================
-   relatórios
-   ============================================================ */
 function abrirRelatorio() {
   const naTurma = !!dadosTurma && !barraTotais.hidden;
   escopoRel = naTurma ? "turma" : "evento";
@@ -1631,7 +1533,6 @@ function gerarCSV(dados, incFora) {
 }
 
 function gerarImpressao(dados, incFora, incResumo, incAssina, soPendentes) {
-  // Numa lista de cobrança, turma que já pagou tudo não vira página em branco.
   const paginas = dados.turmas
     .map((t) => ({ ...t, lista: filtrarAlunos(t.alunos, incFora) }))
     .filter((t) => t.lista.length || !soPendentes)
@@ -1686,10 +1587,6 @@ function gerarImpressao(dados, incFora, incResumo, incAssina, soPendentes) {
   window.print();
 }
 
-/* ============================================================
-   geral
-   ============================================================ */
-// Fechar qualquer modal limpa o rascunho, para o próximo abrir em branco.
 function fecharTudo() {
   document.querySelectorAll(".cortina").forEach((c) => (c.hidden = true));
   eventoEditando = null; pessoaEditando = null; periodoEditando = null;
@@ -1700,7 +1597,6 @@ document.querySelectorAll("[data-fechar]").forEach((b) => b.onclick = fecharTudo
 document.querySelectorAll(".cortina").forEach((c) => c.onclick = (e) => { if (e.target === c) fecharTudo(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") fecharTudo(); });
 
-/* ---------- começa aqui ---------- */
 (async () => {
   try {
     eu = await pegar("/api/eu");

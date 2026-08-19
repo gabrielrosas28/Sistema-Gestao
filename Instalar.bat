@@ -9,7 +9,6 @@ echo   Instalacao do sistema Gestao
 echo   =============================================
 echo.
 
-rem ---------- 1. o Node esta instalado? ----------
 where node >nul 2>nul
 if errorlevel 1 (
   echo   O Node.js nao esta instalado neste PC.
@@ -25,7 +24,6 @@ for /f "delims=" %%v in ('node -v') do set NODEV=%%v
 echo   Node.js %NODEV% encontrado.
 echo.
 
-rem ---------- 2. a pasta esta no OneDrive? ----------
 echo %CD% | find /i "OneDrive" >nul
 if not errorlevel 1 (
   echo   PARE AQUI. Esta pasta esta dentro do OneDrive.
@@ -44,14 +42,12 @@ if not errorlevel 1 (
   exit /b 1
 )
 
-rem ---------- 3. componentes ----------
 echo   Instalando os componentes. Isso leva um ou dois minutos...
 echo.
 call npm install --no-audit --no-fund
 if errorlevel 1 goto erro
 echo.
 
-rem ---------- 4. turmas, calendario e alunos ----------
 echo   =============================================
 echo   Agora os alunos.
 echo.
@@ -72,7 +68,6 @@ call npm run importar -- %PLANILHA%
 if errorlevel 1 goto erro
 echo.
 
-rem ---------- 5. primeiro acesso ----------
 echo   =============================================
 echo   Agora crie o primeiro acesso, que sera da coordenacao.
 echo   Essa pessoa podera cadastrar as demais pelo proprio sistema.

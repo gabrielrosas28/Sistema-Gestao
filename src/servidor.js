@@ -1,7 +1,3 @@
-// Servidor do sistema Gestão — Colégio Santa Chiara
-// Sobe um site na rede da escola. Os PCs só abrem o navegador:
-// os dados ficam todos aqui, num banco só.
-
 import express from "express";
 import cookieParser from "cookie-parser";
 import { dirname, join } from "node:path";
@@ -18,34 +14,24 @@ const PORTA = Number(process.env.PORTA || 8080);
 const app = express();
 app.use(cookieParser());
 
-// Achados e perdidos entra ANTES do leitor de JSON abaixo, e a ordem importa:
-// quem lê o corpo primeiro define o tamanho máximo, e o lote que o tablet manda
-// (5 fotos em base64) passa longe do 1 MB que basta para o resto do sistema.
 montarAchados(app);
 
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(join(aqui, "..", "publico")));
 
-// Erro em rota async não pode derrubar o servidor da secretaria.
 const rota = (fn) => (req, res) =>
   Promise.resolve(fn(req, res)).catch((e) => {
-    // Erro com status é regra de negócio, e a mensagem serve para quem usa.
     if (e?.status) return res.status(e.status).json({ erro: e.message });
     console.error("[erro]", req.method, req.path, e);
     res.status(500).json({ erro: "Algo deu errado aqui no servidor. Tente de novo." });
   });
 
-// ============================================================
-// sessão
-// ============================================================
 app.post("/api/sessao", rota((req, res) => {
   const r = entrar(req.body.email, req.body.senha);
   if (!r) return res.status(401).json({ erro: "E-mail ou senha não conferem." });
   res.cookie("sessao", r.token, {
     httpOnly: true, sameSite: "lax", maxAge: 30 * 86400e3
   });
-  // A versão vai junto: sem ela o rodapé do menu mostra "versão undefined" até
-  // alguém recarregar a página e o /api/eu preencher.
   res.json({ ...r.usuario, versao: VERSAO, ano_letivo: ANO_LETIVO });
 }));
 
@@ -58,18 +44,11 @@ app.delete("/api/sessao", rota((req, res) => {
 app.get("/api/eu", exigirLogin, (req, res) =>
   res.json({ ...req.usuario, versao: VERSAO, ano_letivo: ANO_LETIVO }));
 
-// A chave que o tablet da portaria usa. Só a coordenação vê, e só quando pede —
-// não vai junto do /api/eu para não ficar no console de todo mundo que abre a
-// aba de rede do navegador.
 app.get("/api/chave-tablet", exigirLogin, exigirCoordenacao, (req, res) =>
   res.json({ chave: chaveDoTablet() }));
 
-// Daqui para baixo, tudo exige login.
 app.use("/api", exigirLogin);
 
-// ============================================================
-// turmas e alunos
-// ============================================================
 app.get("/api/turmas", rota((req, res) => {
   res.json(listar(
     `SELECT t.*, (SELECT COUNT(*) FROM alunos a WHERE a.turma_id = t.id AND a.ativo = 1) AS alunos
@@ -83,13 +62,7 @@ app.get("/api/turmas/:id/alunos", rota((req, res) => {
       WHERE turma_id = ? AND ativo = 1 ORDER BY nome`, req.params.id));
 }));
 
-// ============================================================
-// eventos e calendário
-// ============================================================
 app.get("/api/eventos", rota((req, res) => {
-  // Evento fechado sai daqui e vai para a lista de arquivados. Ele não some:
-  // continua no calendário, nos relatórios e no histórico — só para de aparecer
-  // na tela de quem lança pagamento, que é onde ele já não serve para nada.
   const arquivados = req.query.arquivados === "1";
   const eventos = listar(
     `SELECT e.*,
@@ -113,8 +86,6 @@ app.get("/api/eventos/:id", rota((req, res) => {
   res.json({
     ...e,
     resumo: e.cobra ? resumoDoEvento(e.id) : null,
-    // Turma dentro de evento fechado aparece fechada mesmo sem fechamento
-    // próprio: fechar o evento tranca todas de uma vez.
     turmas: turmas.map((t) => ({
       ...t,
       fechada: !!turmaFechada(e.id, t.id),
@@ -123,10 +94,6 @@ app.get("/api/eventos/:id", rota((req, res) => {
   });
 }));
 
-// Criar evento é da secretaria e da coordenação. Quem monta a lista da festa
-// junina é quem está no balcão; travar isso na coordenação só criava fila.
-// Mexer no valor depois que já entrou dinheiro, tirar turma e cancelar
-// continuam sendo decisão da coordenação, logo abaixo.
 app.post("/api/eventos", rota((req, res) => {
   const { nome, categoria, inicio, fim, cobra, valor, turmas, observacao } = req.body;
   if (!nome?.trim()) return res.status(400).json({ erro: "Dê um nome ao evento." });
@@ -140,7 +107,6 @@ app.post("/api/eventos", rota((req, res) => {
   const valorNum = valorValido(valor) ?? 0;
   if (cobra && !(valorNum > 0)) return res.status(400).json({ erro: "Informe o valor por aluno." });
 
-  // Turma que não existe viraria erro feio de banco lá na frente.
   const existentes = new Set(listar(
     `SELECT id FROM turmas WHERE ativa = 1 AND ano_letivo = ?`, ANO_LETIVO).map((t) => t.id));
   const invalidas = turmas.filter((id) => !existentes.has(Number(id)));
@@ -158,12 +124,10 @@ app.post("/api/eventos", rota((req, res) => {
     const eventoId = Number(r.lastInsertRowid);
 
     const ligaTurma = bd.prepare(`INSERT INTO evento_turmas (evento_id, turma_id) VALUES (?, ?)`);
-    // Já cria a participação de todo aluno: a turma abre pronta para lançar.
     const criaParticipacao = bd.prepare(
       `INSERT INTO participacoes (evento_id, aluno_id, participa, valor)
        SELECT ?, id, 1, ? FROM alunos WHERE turma_id = ? AND ativo = 1`);
 
-    // Set: turma repetida na lista não vira erro de chave duplicada.
     for (const turmaId of new Set(turmas.map(Number))) {
       ligaTurma.run(eventoId, turmaId);
       if (cobra) criaParticipacao.run(eventoId, valorNum, turmaId);
@@ -176,7 +140,6 @@ app.post("/api/eventos", rota((req, res) => {
   res.status(201).json({ id });
 }));
 
-// Editar evento é da coordenação: mexe em data, valor e turmas.
 app.put("/api/eventos/:id", exigirCoordenacao, rota((req, res) => {
   const e = buscar(`SELECT * FROM eventos WHERE id = ?`, req.params.id);
   if (!e) return res.status(404).json({ erro: "Evento não encontrado." });
@@ -211,7 +174,6 @@ app.put("/api/eventos/:id", exigirCoordenacao, rota((req, res) => {
         entraram++;
       }
       for (const id of atuais) if (!novas.has(id)) {
-        // Tirar uma turma que já pagou apagaria o registro do dinheiro.
         const pago = buscar(
           `SELECT COUNT(*) AS n FROM v_situacao WHERE evento_id = ? AND turma_id = ? AND situacao = 'pago'`,
           e.id, id).n;
@@ -228,7 +190,6 @@ app.put("/api/eventos/:id", exigirCoordenacao, rota((req, res) => {
       }
     }
 
-    // Trocar o valor do evento só mexe em quem ainda não pagou.
     if (aplicarValor && e.cobra) {
       valoresTrocados = rodar(
         `UPDATE participacoes SET valor = ?
@@ -245,7 +206,6 @@ app.put("/api/eventos/:id", exigirCoordenacao, rota((req, res) => {
   res.json({ ...buscar(`SELECT * FROM eventos WHERE id = ?`, e.id), ...resultado });
 }));
 
-// Cancelar não apaga: o evento some das listas e o histórico continua.
 app.delete("/api/eventos/:id", exigirCoordenacao, rota((req, res) => {
   const e = buscar(`SELECT * FROM eventos WHERE id = ?`, req.params.id);
   if (!e) return res.status(404).json({ erro: "Evento não encontrado." });
@@ -261,7 +221,6 @@ app.delete("/api/eventos/:id", exigirCoordenacao, rota((req, res) => {
   res.json({ ok: true });
 }));
 
-// ---------- calendário letivo: unidades, recessos e feriados ----------
 app.get("/api/periodos", rota((req, res) => {
   res.json(listar(`SELECT * FROM periodos WHERE ano_letivo = ? ORDER BY inicio, nome`, ANO_LETIVO));
 }));
@@ -305,9 +264,8 @@ app.delete("/api/periodos/:id", exigirCoordenacao, rota((req, res) => {
   res.json({ ok: true });
 }));
 
-// Mês do calendário: eventos, unidades, recessos e feriados juntos.
 app.get("/api/calendario", rota((req, res) => {
-  const mes = req.query.mes || new Date().toISOString().slice(0, 7); // AAAA-MM
+  const mes = req.query.mes || new Date().toISOString().slice(0, 7);
   const [ano, m] = mes.split("-").map(Number);
   const primeiro = `${mes}-01`;
   const ultimo = `${mes}-${String(new Date(ano, m, 0).getDate()).padStart(2, "0")}`;
@@ -326,15 +284,11 @@ app.get("/api/calendario", rota((req, res) => {
   });
 }));
 
-// ============================================================
-// pagamentos
-// ============================================================
 app.get("/api/eventos/:id/turmas/:turmaId", rota((req, res) => {
   const { id, turmaId } = req.params;
   const evento = buscar(`SELECT fechado_em, fechado_por_nome FROM eventos WHERE id = ?`, id);
   const eventoFechado = !!evento?.fechado_em;
 
-  // Aluno novo só entra em turma que ainda aceita lançamento.
   if (!eventoFechado && !turmaFechada(id, turmaId)) completarParticipacoes(id, turmaId);
   const fech = turmaFechada(id, turmaId);
   res.json({
@@ -353,7 +307,6 @@ app.get("/api/eventos/:id/turmas/:turmaId", rota((req, res) => {
   });
 }));
 
-// "Este aluno vai / não vai" e ajuste de valor individual.
 app.put("/api/participacoes/:id", rota((req, res) => {
   const p = buscar(`SELECT * FROM participacoes WHERE id = ?`, req.params.id);
   if (!p) return res.status(404).json({ erro: "Participação não encontrada." });
@@ -373,11 +326,9 @@ app.put("/api/participacoes/:id", rota((req, res) => {
   if (!participa && pago) return res.status(409).json({
     erro: "Este aluno já pagou. Estorne o pagamento antes de tirar do evento." });
 
-  // Isentar quem já pagou esconderia um dinheiro que entrou de verdade.
   if (isento && !p.isento && pago) return res.status(409).json({
     erro: "Este aluno já pagou. Estorne o pagamento antes de isentar." });
 
-  // Perdoar um valor é decisão que precisa de justificativa registrada.
   let motivo = p.motivo_isencao;
   if (isento && !p.isento) {
     motivo = String(req.body.motivo_isencao || "").trim();
@@ -414,7 +365,6 @@ app.post("/api/pagamentos", rota((req, res) => {
     `SELECT id FROM pagamentos WHERE participacao_id = ? AND estornado_em IS NULL`, p.id);
   if (jaPago) return res.status(409).json({ erro: "Este aluno já consta como pago." });
 
-  // Sem valor no pedido, vale o combinado do evento para aquele aluno.
   const valorPago = valor === undefined ? p.valor : valorValido(valor);
   if (valorPago === null) return res.status(400).json({ erro: "Valor inválido." });
   if (valorPago === 0) return res.status(400).json({ erro: "O valor recebido não pode ser zero." });
@@ -428,7 +378,6 @@ app.post("/api/pagamentos", rota((req, res) => {
   res.status(201).json(buscar(`SELECT * FROM v_situacao WHERE participacao_id = ?`, p.id));
 }));
 
-// Estorno não apaga: marca. O relatório de ontem continua batendo.
 app.delete("/api/pagamentos/:id", rota((req, res) => {
   const pg = buscar(`SELECT * FROM pagamentos WHERE id = ? AND estornado_em IS NULL`, req.params.id);
   if (!pg) return res.status(404).json({ erro: "Pagamento não encontrado." });
@@ -444,13 +393,6 @@ app.delete("/api/pagamentos/:id", rota((req, res) => {
   res.json(buscar(`SELECT * FROM v_situacao WHERE participacao_id = ?`, p.id));
 }));
 
-// ============================================================
-// fechar e reabrir o evento inteiro
-// ============================================================
-// Fechar turma a turma serve para conferir o caixa de cada uma. Fechar o evento
-// é o passo seguinte: acabou, ninguém mais lança nem estorna nada ali, e ele
-// sai da tela de pagamentos. Não é cancelar nem apagar — o evento continua no
-// calendário, nos relatórios e no histórico, e a coordenação reabre se precisar.
 app.post("/api/eventos/:id/fechamento", exigirCoordenacao, rota((req, res) => {
   const e = buscar(`SELECT * FROM eventos WHERE id = ?`, req.params.id);
   if (!e) return res.status(404).json({ erro: "Evento não encontrado." });
@@ -470,17 +412,12 @@ app.delete("/api/eventos/:id/fechamento", exigirCoordenacao, rota((req, res) => 
   if (!e) return res.status(404).json({ erro: "Evento não encontrado." });
   if (!e.fechado_em) return res.status(409).json({ erro: "Este evento não está fechado." });
 
-  // Reabrir o evento devolve as turmas ao estado em que estavam: a que a
-  // secretaria tinha fechado à mão continua fechada, e é reaberta uma a uma.
   rodar(`UPDATE eventos SET fechado_em = NULL, fechado_por = NULL, fechado_por_nome = NULL
           WHERE id = ?`, e.id);
   anotar(req.usuario.id, "reabriu evento", "evento", e.id, { nome: e.nome });
   res.json(buscar(`SELECT * FROM eventos WHERE id = ?`, e.id));
 }));
 
-// ============================================================
-// fechar e reabrir turma
-// ============================================================
 app.post("/api/fechamentos", exigirCoordenacao, rota((req, res) => {
   const { evento_id, turma_id } = req.body;
   const ev = buscar(`SELECT fechado_em FROM eventos WHERE id = ?`, evento_id);
@@ -511,11 +448,6 @@ app.delete("/api/fechamentos/:eventoId/:turmaId", exigirCoordenacao, rota((req, 
   res.json({ ok: true });
 }));
 
-// ============================================================
-// relatórios
-// ============================================================
-// Uma chamada devolve tudo que o relatório precisa, inclusive a
-// conferência de caixa por meio de pagamento.
 app.get("/api/relatorios/pagamentos", rota((req, res) => {
   const { evento, turma, somentePendentes } = req.query;
   const e = buscar(`SELECT * FROM eventos WHERE id = ?`, evento);
@@ -539,7 +471,6 @@ app.get("/api/relatorios/pagamentos", rota((req, res) => {
   });
 }));
 
-// Histórico de quem mexeu no quê — só coordenação.
 app.get("/api/registro", exigirCoordenacao, rota((req, res) => {
   res.json(listar(
     `SELECT r.*, COALESCE(u.nome, r.usuario_nome) AS usuario FROM registro r
@@ -547,7 +478,6 @@ app.get("/api/registro", exigirCoordenacao, rota((req, res) => {
       ORDER BY r.id DESC LIMIT 300`));
 }));
 
-// Cadastro de quem usa o sistema — só coordenação.
 app.get("/api/usuarios", exigirCoordenacao, rota((req, res) => {
   res.json(listar(`SELECT id, nome, email, papel, ativo FROM usuarios ORDER BY nome`));
 }));
@@ -576,8 +506,6 @@ app.put("/api/usuarios/:id", exigirCoordenacao, rota((req, res) => {
               : (req.body.papel === "coordenacao" ? "coordenacao" : "secretaria");
   const ativo = req.body.ativo === undefined ? u.ativo : (req.body.ativo ? 1 : 0);
 
-  // Sem coordenação ativa ninguém mais cria evento nem reabre turma:
-  // o sistema ficaria trancado por fora.
   if (u.papel === "coordenacao" && (papel !== "coordenacao" || !ativo)) {
     const outras = buscar(
       `SELECT COUNT(*) AS n FROM usuarios
@@ -590,7 +518,6 @@ app.put("/api/usuarios/:id", exigirCoordenacao, rota((req, res) => {
     if (String(req.body.senha).length < 8)
       return res.status(400).json({ erro: "A senha precisa de pelo menos 8 letras." });
     trocarSenha(u.id, req.body.senha);
-    // Trocar a senha derruba as sessões abertas daquela pessoa.
     rodar(`DELETE FROM sessoes WHERE usuario_id = ?`, u.id);
   }
 
@@ -602,28 +529,13 @@ app.put("/api/usuarios/:id", exigirCoordenacao, rota((req, res) => {
   res.json(buscar(`SELECT id, nome, email, papel, ativo FROM usuarios WHERE id = ?`, u.id));
 }));
 
-// Excluir de vez quem usa o sistema — não é o mesmo que desativar.
-//
-// Desativar tira o acesso e deixa a linha lá. Excluir apaga a pessoa da tabela.
-// Isso esbarra num problema real: o nome dela está pendurado em pagamento
-// lançado, turma fechada, evento criado e no histórico inteiro. Se o vínculo
-// simplesmente sumisse, um relatório de março passaria a dizer que o dinheiro
-// entrou sem ninguém ter recebido.
-//
-// Então, antes de apagar, o nome é copiado para dentro de cada um desses
-// registros, em texto. O vínculo com a tabela usuarios fica nulo, o histórico
-// continua dizendo "Maria recebeu", e a pessoa some do cadastro de acesso.
-// Isto é sobre quem trabalha na escola — aluno não é tocado aqui.
 app.delete("/api/usuarios/:id", exigirCoordenacao, rota((req, res) => {
   const u = buscar(`SELECT * FROM usuarios WHERE id = ?`, req.params.id);
   if (!u) return res.status(404).json({ erro: "Usuário não encontrado." });
 
-  // Apagar a si mesmo derruba a própria sessão no meio da ação.
   if (u.id === req.usuario.id) return res.status(409).json({
     erro: "Você não pode excluir a sua própria conta. Peça a outra pessoa da coordenação." });
 
-  // Mesmo motivo de sempre: sem coordenação ativa ninguém reabre turma, e o
-  // sistema fica trancado por fora.
   if (u.papel === "coordenacao") {
     const outras = buscar(
       `SELECT COUNT(*) AS n FROM usuarios
@@ -655,24 +567,17 @@ app.delete("/api/usuarios/:id", exigirCoordenacao, rota((req, res) => {
       `UPDATE registro SET usuario_nome = COALESCE(usuario_nome, ?), usuario_id = NULL
         WHERE usuario_id = ?`, u.nome, u.id);
 
-    // As sessões saem sozinhas por ON DELETE CASCADE, mas apagar antes deixa
-    // claro que a pessoa perde o acesso no mesmo instante.
     rodar(`DELETE FROM sessoes WHERE usuario_id = ?`, u.id);
     rodar(`DELETE FROM usuarios WHERE id = ?`, u.id);
     return { pagou, estornou, fechou, criou };
   })();
 
-  // Anotado depois de apagar, e de propósito: como o vínculo já não existe, o
-  // nome de quem saiu fica guardado no detalhe.
   anotar(req.usuario.id, "excluiu usuário", "usuario", null,
          { nome: u.nome, email: u.email, papel: u.papel, ...rastro });
 
   res.json({ ok: true, ...rastro });
 }));
 
-// ============================================================
-// apoio
-// ============================================================
 function turmaFechada(eventoId, turmaId) {
   return buscar(
     `SELECT f.*, COALESCE(u.nome, f.fechado_por_nome, 'alguém') AS quem_fechou
@@ -682,9 +587,6 @@ function turmaFechada(eventoId, turmaId) {
     eventoId, turmaId);
 }
 
-// Bloqueia lançamento em turma fechada ou em evento fechado, sempre dizendo
-// qual das duas coisas está travando — "não pode" sem motivo faz a secretaria
-// ligar para a coordenação sem saber o que pedir.
 function travada(res, eventoId, alunoId) {
   const a = buscar(`SELECT turma_id FROM alunos WHERE id = ?`, alunoId);
   if (!a) { res.status(404).json({ erro: "Aluno não encontrado." }); return true; }
@@ -706,8 +608,6 @@ function travada(res, eventoId, alunoId) {
   return true;
 }
 
-// Turma sem nenhum aluno faz o SUM devolver nulo, e nulo quebra a conta na
-// tela. Aqui tudo sai como número, sempre.
 function resumoDoEvento(eventoId, turmaId) {
   const filtro = turmaId ? `AND turma_id = ?` : ``;
   const p = turmaId ? [eventoId, turmaId] : [eventoId];
@@ -725,8 +625,6 @@ function resumoDoEvento(eventoId, turmaId) {
      FROM v_situacao WHERE evento_id = ? ${filtro}`, ...p);
 }
 
-// Aluno que entrou na escola depois do evento criado não tinha participação.
-// Sem isso ele sumiria da lista da turma e ninguém cobraria dele.
 function completarParticipacoes(eventoId, turmaId) {
   const e = buscar(`SELECT cobra, valor FROM eventos WHERE id = ?`, eventoId);
   if (!e?.cobra) return 0;
@@ -741,7 +639,6 @@ function completarParticipacoes(eventoId, turmaId) {
   return r.changes;
 }
 
-// Dinheiro digitado pela tela chega como texto e às vezes vem torto.
 function valorValido(v) {
   const n = Number(v);
   return Number.isFinite(n) && n >= 0 && n < 1e7 ? n : null;
@@ -762,10 +659,6 @@ function caixaDaTurma(eventoId, turmaId) {
   return { ...caixa, total, qtd };
 }
 
-// ============================================================
-// sobe
-// ============================================================
-// Sessão vencida não serve para nada e só faz o banco crescer.
 rodar(`DELETE FROM sessoes WHERE expira_em < datetime('now','localtime')`);
 
 app.listen(PORTA, "0.0.0.0", () => {

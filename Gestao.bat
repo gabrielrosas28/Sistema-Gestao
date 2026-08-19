@@ -3,11 +3,6 @@ chcp 65001 >nul
 title Gestao - Colegio Santa Chiara  (NAO FECHE ESTA JANELA)
 cd /d "%~dp0"
 
-rem O "call" antes do npm nao e enfeite. Sem ele, o npm (que e um .cmd) rouba
-rem o controle e esta janela fecha no instante em que o npm termina, sem
-rem passar pelo pause. Era por isso que o Gestao.bat "abria e fechava" sem
-rem dizer uma palavra sobre o erro.
-
 where node >nul 2>nul
 if errorlevel 1 (
   echo.
@@ -18,8 +13,6 @@ if errorlevel 1 (
   exit /b 1
 )
 
-rem Este .bat so funciona de dentro da pasta do sistema. Uma copia solta em
-rem outro lugar da erro do npm que ninguem entende ("nao achei package.json").
 if not exist "%~dp0package.json" (
   echo.
   echo   Este Gestao.bat esta na pasta errada.

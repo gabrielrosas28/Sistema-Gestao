@@ -1,15 +1,3 @@
-// Cadastra quem vai usar o sistema.
-//
-//   npm run criar-usuario -- "Maria Silva" maria@santachiara.com.br senhaSegura coordenacao
-//
-// Papéis:
-//   secretaria  — lança e estorna pagamentos
-//   coordenacao — tudo isso, mais criar eventos, fechar/reabrir turma,
-//                 cadastrar gente e ver o histórico
-//
-// O primeiro usuário precisa ser da coordenação. Os próximos podem ser
-// cadastrados pela tela de usuários, sem mexer em linha de comando.
-
 import { buscar } from "./banco.js";
 import { criarUsuario } from "./acesso.js";
 

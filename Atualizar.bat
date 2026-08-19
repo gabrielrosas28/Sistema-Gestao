@@ -9,7 +9,6 @@ echo   Atualizacao do sistema Gestao
 echo   =============================================
 echo.
 
-rem ---------- o sistema esta rodando? ----------
 tasklist /fi "imagename eq node.exe" | find /i "node.exe" >nul
 if not errorlevel 1 (
   echo   O sistema parece estar ligado, e os arquivos ficariam travados
@@ -25,18 +24,15 @@ if not errorlevel 1 (
   exit /b 1
 )
 
-rem ---------- backup antes de qualquer coisa ----------
 echo   Guardando uma copia do banco antes de mexer em nada...
-call npm run backup >nul 2>nul
+call "%~dp0Backup.bat" /auto
 if errorlevel 1 (
   echo   Nao consegui fazer o backup. Atualizacao cancelada por seguranca.
   pause
   exit /b 1
 )
-echo   Copia guardada.
 echo.
 
-rem ---------- versao nova ----------
 where git >nul 2>nul
 if errorlevel 1 (
   echo   O Git nao esta instalado neste PC.
@@ -46,11 +42,38 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo   Baixando a versao nova...
-call git pull
+for /f "usebackq delims=" %%b in (`git rev-parse --abbrev-ref HEAD 2^>nul`) do set RAMO=%%b
+
+if not defined RAMO (
+  echo   Esta pasta nao e uma copia do repositorio do sistema, entao nao ha
+  echo   de onde baixar a versao nova. Confira se o Atualizar.bat esta dentro
+  echo   da pasta certa do sistema.
+  echo.
+  pause
+  exit /b 1
+)
+if "%RAMO%"=="HEAD" (
+  echo   O Git desta pasta esta fora de qualquer ramo. Rode uma vez, aqui
+  echo   dentro, o comando abaixo e depois abra o Atualizar.bat de novo:
+  echo.
+  echo     git checkout main
+  echo.
+  pause
+  exit /b 1
+)
+
+echo   Baixando a versao nova do ramo "%RAMO%"...
+call git pull origin %RAMO%
 if errorlevel 1 (
   echo.
-  echo   Nao consegui baixar. Confira a internet do servidor.
+  echo   Nao consegui baixar o ramo "%RAMO%".
+  echo.
+  echo   Costuma ser uma destas tres coisas:
+  echo     - o servidor esta sem internet
+  echo     - o ramo "%RAMO%" ainda nao existe no GitHub
+  echo     - ha alteracao local nesta pasta atrapalhando a mesclagem
+  echo       ^(rode "git status" aqui dentro para ver^)
+  echo.
   pause
   exit /b 1
 )
@@ -65,10 +88,6 @@ echo   Conferindo se a versao nova esta coerente...
 call node testes/coerencia.mjs
 if errorlevel 1 goto erro
 
-rem ---------- o banco desta escola aguenta a versao nova? ----------
-rem Monta um banco de mentira no formato antigo, com pagamento e turma
-rem fechada dentro, liga a versao nova em cima e confere real por real.
-rem Nao encosta no banco de verdade: roda tudo numa pasta temporaria.
 echo.
 echo   Conferindo se o banco aguenta a atualizacao...
 call node testes/migracao.mjs
@@ -85,9 +104,9 @@ exit /b 0
 
 :erro
 echo.
-echo   Algo deu errado. O banco nao foi tocado e a copia de seguranca
-echo   esta em OneDrive\Backups Gestao. Mande o texto desta janela
-echo   para quem acompanha o sistema.
+echo   Algo deu errado. O banco nao foi tocado, e a copia de seguranca esta
+echo   guardada no caminho que apareceu la em cima, no comeco desta janela.
+echo   Mande o texto desta janela para quem acompanha o sistema.
 echo.
 pause
 exit /b 1

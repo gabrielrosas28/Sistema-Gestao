@@ -1,21 +1,3 @@
-// O banco da escola sobrevive à atualização?
-//
-//   node testes/migracao.mjs
-//
-// Este é o teste do dia da atualização. Ele monta um banco no formato da
-// versão 1.3.1 — o que está rodando no PC da secretaria agora, com evento
-// aberto, pagamento lançado, estorno e turma fechada — e liga a versão nova em
-// cima dele. Depois confere, real por real, que nada mudou de lugar.
-//
-// Existe porque a versão 1.4.0 precisa afrouxar duas colunas que nasceram
-// NOT NULL (`pagamentos.lancado_por` e `fechamentos.fechado_por`), e o SQLite
-// não faz isso com ALTER TABLE: a tabela é derrubada e refeita. É a operação
-// mais perigosa que este sistema já fez no banco de alguém. Um teste que só
-// roda em banco novo não prova nada sobre ela, porque em banco novo a
-// reconstrução nem chega a acontecer.
-//
-// Se este teste falhar, NÃO atualize o servidor da escola.
-
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -36,12 +18,6 @@ function ok(nome, cond, extra = "") {
   if (!cond) falhas++;
 }
 
-// ============================================================
-// 1. o banco como ele está hoje no PC da escola
-// ============================================================
-// O esquema da 1.3.1 está copiado aqui de propósito, e não lido do histórico
-// do git: este é o retrato de um banco que já existe no mundo, e ele não pode
-// mudar quando alguém mexer no esquema.sql de hoje.
 const ESQUEMA_1_3_1 = `
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
@@ -130,14 +106,35 @@ CREATE TABLE sistema (
   chave TEXT PRIMARY KEY, valor TEXT NOT NULL,
   em TEXT NOT NULL DEFAULT (datetime('now','localtime')));
 INSERT INTO sistema (chave, valor) VALUES ('versao', '1.3.1');
+
+-- A visao tem de estar aqui, e nao so as tabelas.
+--
+-- Um banco que rodou a 1.3.1 tem v_situacao gravada dentro dele, porque o
+-- esquema.sql a cria a cada partida. Sem ela o teste montava um "banco antigo"
+-- que nao existe em escola nenhuma, e deixou passar o erro que derrubou o
+-- servidor: reconstruir a tabela pagamentos faz o SQLite reanalisar o esquema,
+-- e a visao que le pagamentos quebra a analise no meio da troca.
+--
+-- Copia da 1.3.1, sem os campos de isencao que a 1.4.0 acrescenta -- e o
+-- ponto: a visao antiga precisa atrapalhar do jeito que a antiga atrapalha.
+CREATE VIEW v_situacao AS
+SELECT p.id AS participacao_id, p.evento_id, p.aluno_id,
+       a.matricula, a.nome AS aluno, a.turma_id,
+       t.codigo AS turma_codigo, t.nome AS turma,
+       p.participa, p.valor,
+       pg.id AS pagamento_id, pg.meio, pg.recebido_em,
+       CASE WHEN p.participa = 0   THEN 'fora'
+            WHEN pg.id IS NOT NULL THEN 'pago'
+            ELSE 'pendente' END AS situacao
+  FROM participacoes p
+  JOIN alunos a ON a.id = p.aluno_id
+  JOIN turmas t ON t.id = a.turma_id
+  LEFT JOIN pagamentos pg ON pg.participacao_id = p.id AND pg.estornado_em IS NULL;
 `;
 
 const velho = new DatabaseSync(caminhoBanco);
 velho.exec(ESQUEMA_1_3_1);
 
-// A senha "senha12345" com o mesmo custo do acesso.js. Vai colada aqui, e não
-// gerada na hora, porque o ponto do teste é um banco que já existia antes desta
-// versão — inclusive o hash que estava gravado nele.
 const HASH = "$2a$10$B7JdgDu3PQGksaou7s4/9OvKk4/TMSUjI19drcHRWon3EBhS28k6G";
 velho.exec(`
 INSERT INTO usuarios (id,nome,email,senha_hash,papel) VALUES
@@ -199,7 +196,6 @@ INSERT INTO registro (usuario_id,acao,entidade,entidade_id,detalhe,em) VALUES
  (1,'fechou turma','fechamento',1,'{"evento_id":1}','${ANO}-06-05 17:00:00');
 `);
 
-// ---- o retrato do dinheiro ANTES de qualquer coisa ----
 const antes = {
   pagamentos: velho.prepare(`SELECT * FROM pagamentos ORDER BY id`).all(),
   fechamentos: velho.prepare(`SELECT * FROM fechamentos ORDER BY id`).all(),
@@ -217,9 +213,6 @@ console.log("\n  Atualizar o banco da escola sem perder nada\n  ----------------
 console.log(`  Banco 1.3.1 montado: ${antes.pagamentos.length} pagamentos, ` +
             `R$ ${antes.caixa.total} em caixa, ${antes.fechamentos.length} fechamentos\n`);
 
-// ============================================================
-// 2. liga a versão nova em cima dele
-// ============================================================
 const servidor = spawn(process.execPath, [join(raiz, "src", "servidor.js")], {
   env: { ...process.env, DADOS: pastaDados, PORTA: String(PORTA) },
   stdio: ["ignore", "pipe", "pipe"]
@@ -230,7 +223,7 @@ servidor.stderr.on("data", (d) => (saida += d));
 
 function encerrar(codigo) {
   servidor.kill();
-  try { rmSync(pastaDados, { recursive: true, force: true }); } catch { /* já foi */ }
+  try { rmSync(pastaDados, { recursive: true, force: true }); } catch { }
   process.exit(codigo);
 }
 
@@ -244,14 +237,14 @@ async function req(metodo, caminho, corpo) {
   const set = r.headers.getSetCookie?.() || [];
   if (set.length) cookie = set.map((c) => c.split(";")[0]).join("; ");
   let dados = null;
-  try { dados = await r.json(); } catch { /* 204 */ }
+  try { dados = await r.json(); } catch { }
   return { status: r.status, dados };
 }
 
 async function esperarSubir() {
   for (let i = 0; i < 60; i++) {
     try { if ((await fetch(B + "/", { signal: AbortSignal.timeout(500) })).ok) return true; }
-    catch { /* ainda subindo */ }
+    catch { }
     await new Promise((p) => setTimeout(p, 250));
   }
   return false;
@@ -280,7 +273,6 @@ try {
         WHERE estornado_em IS NULL GROUP BY meio ORDER BY meio`).all()
   };
 
-  // ---- o dinheiro ----
   ok("o caixa fecha no mesmo centavo",
      depois.caixa.total === antes.caixa.total && depois.caixa.n === antes.caixa.n,
      `antes R$ ${antes.caixa.total} em ${antes.caixa.n} · depois R$ ${depois.caixa.total} em ${depois.caixa.n}`);
@@ -292,7 +284,6 @@ try {
   ok("nenhum pagamento sumiu nem apareceu",
      depois.pagamentos.length === antes.pagamentos.length, depois.pagamentos.length + " pagamentos");
 
-  // Linha a linha: id, valor, meio, hora, quem lançou, estorno e motivo.
   const iguais = antes.pagamentos.every((a) => {
     const d = depois.pagamentos.find((x) => x.id === a.id);
     return d && d.participacao_id === a.participacao_id && d.valor === a.valor &&
@@ -305,7 +296,6 @@ try {
   ok("o estorno continua marcado, com motivo",
      depois.pagamentos.find((p) => p.id === 4)?.motivo_estorno === "pai pagou duas vezes");
 
-  // ---- os fechamentos ----
   const fechIguais = antes.fechamentos.every((a) => {
     const d = depois.fechamentos.find((x) => x.id === a.id);
     return d && d.evento_id === a.evento_id && d.turma_id === a.turma_id &&
@@ -319,13 +309,11 @@ try {
      depois.participacoes === antes.participacoes && depois.registro === antes.registro,
      `${depois.participacoes} participacoes, ${depois.registro} linhas de historico`);
 
-  // ---- integridade ----
   ok("nenhum vinculo do banco ficou quebrado",
      bd.prepare(`PRAGMA foreign_key_check`).all().length === 0);
   ok("o banco passa na verificacao de integridade do SQLite",
      bd.prepare(`PRAGMA integrity_check`).get().integrity_check === "ok");
 
-  // ---- as colunas novas existem e estao vazias ----
   const colunas = (t) => bd.prepare(`PRAGMA table_info(${t})`).all().map((c) => c.name);
   ok("as colunas de nome preservado existem agora",
      colunas("pagamentos").includes("lancado_por_nome") &&
@@ -343,9 +331,6 @@ try {
      bd.prepare(`SELECT COUNT(*) AS n FROM ap_itens`).get().n === 0);
   bd.close();
 
-  // ============================================================
-  // 3. e o sistema continua funcionando
-  // ============================================================
   await req("POST", "/api/sessao", { email: "dora@escola.br", senha: "senha12345" });
   let r = await req("GET", "/api/eu");
   ok("da para entrar com a senha de antes", r.status === 200 && r.dados.versao === "1.4.0",
@@ -379,7 +364,6 @@ try {
                 { participacao_id: naFechada.participacao_id, valor: 35, meio: "pix" });
   ok("turma fechada continua recusando lancamento", r.status === 423, r.dados?.erro);
 
-  // O 2º ano A ficou aberto: lançar ali tem de continuar funcionando igual.
   r = await req("GET", "/api/eventos/1/turmas/2");
   const pendente = r.dados.alunos.find((a) => a.situacao === "pendente");
   r = await req("POST", "/api/pagamentos",
@@ -401,9 +385,6 @@ try {
   r = await req("GET", "/api/itens");
   ok("a aba de achados abre vazia, sem estorvar nada", r.status === 200 && r.dados.length === 0);
 
-  // ============================================================
-  // 4. ligar de novo não faz a reconstrução acontecer duas vezes
-  // ============================================================
   servidor.kill();
   await new Promise((p) => setTimeout(p, 700));
   const segundaVez = spawn(process.execPath, [join(raiz, "src", "servidor.js")], {
@@ -420,7 +401,6 @@ try {
      saida2.match(/banco: .*/g)?.join(" | ") || "nada a fazer");
 
   const conferir = new DatabaseSync(caminhoBanco, { readOnly: true });
-  // R$ 153,50 que já estavam no banco antigo, mais os R$ 35 lançados agora.
   ok("e o dinheiro continua o mesmo depois de duas partidas",
      conferir.prepare(`SELECT ROUND(SUM(valor),2) AS t FROM pagamentos
                         WHERE estornado_em IS NULL`).get().t === 188.5,

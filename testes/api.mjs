@@ -1,4 +1,3 @@
-// Teste de ponta a ponta da API
 const B = "http://127.0.0.1:8099";
 let cookie = "";
 let falhas = 0;

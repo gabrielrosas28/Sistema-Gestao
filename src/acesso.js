@@ -1,10 +1,3 @@
-// Login, sessão e níveis de acesso.
-//
-// Dois papéis:
-//   secretaria  — lança e estorna pagamentos, marca participação
-//   coordenacao — tudo isso, mais criar eventos, fechar e reabrir turma,
-//                 cadastrar usuários e ver o histórico
-
 import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
 import { buscar, rodar, anotar } from "./banco.js";
@@ -29,7 +22,6 @@ export function entrar(email, senha) {
     `SELECT * FROM usuarios WHERE email = ? AND ativo = 1`,
     String(email || "").trim().toLowerCase()
   );
-  // Compara mesmo sem usuário, para não entregar quais e-mails existem.
   const confere = bcrypt.compareSync(senha || "", u?.senha_hash || "$2a$10$invalido");
   if (!u || !confere) return null;
 
@@ -62,7 +54,6 @@ export function usuarioDaSessao(token) {
   return { id: linha.id, nome: linha.nome, email: linha.email, papel: linha.papel };
 }
 
-// --- porteiros das rotas ---
 export function exigirLogin(req, res, prox) {
   req.usuario = usuarioDaSessao(req.cookies?.sessao);
   if (!req.usuario) return res.status(401).json({ erro: "Faça login para continuar." });

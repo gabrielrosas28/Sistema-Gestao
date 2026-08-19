@@ -13,7 +13,6 @@ echo   =============================================
 echo   Pasta: %CD%
 echo.
 
-rem ---------- 1. Node ----------
 where node >nul 2>nul
 if errorlevel 1 (
   echo   [x] Node.js NAO esta instalado
@@ -22,7 +21,6 @@ if errorlevel 1 (
 )
 for /f "delims=" %%v in ('node -v') do echo   [ok] Node.js %%v
 
-rem ---------- 2. arquivos ----------
 if not exist "src\servidor.js" (
   echo   [x] Nao achei src\servidor.js
   echo       Este arquivo precisa estar dentro da pasta do sistema.
@@ -30,9 +28,6 @@ if not exist "src\servidor.js" (
 )
 echo   [ok] Arquivos do sistema no lugar
 
-rem Nao basta a pasta node_modules existir. Conferir so o express deixava
-rem passar o caso real: node_modules copiada de outro PC ou tirada de um .zip,
-rem com uma dependencia pela metade. O sistema so reclamava na hora do login.
 set "FALTANDO="
 for %%p in (express bcryptjs cookie-parser xlsx) do (
   if not exist "node_modules\%%p\package.json" set "FALTANDO=!FALTANDO! %%p"
@@ -52,7 +47,6 @@ if defined FALTANDO (
 )
 echo   [ok] Componentes instalados
 
-rem ---------- 3. banco ----------
 if not exist "dados\gestao.db" (
   echo   [x] Banco de dados nao existe ainda
   echo       Rode o Instalar.bat para importar turmas e alunos.
@@ -61,7 +55,6 @@ if not exist "dados\gestao.db" (
 for %%f in ("dados\gestao.db") do set "TAM=%%~zf"
 echo   [ok] Banco encontrado (!TAM! bytes)
 
-rem ---------- 4. tem alguem escutando na porta? ----------
 set "ESCUTANDO="
 for /f "tokens=*" %%l in ('netstat -ano ^| findstr /r /c:":%PORTA% .*LISTENING"') do set "ESCUTANDO=%%l"
 
@@ -85,7 +78,6 @@ echo   [x] NINGUEM esta escutando na porta %PORTA%
 echo       E por isso que o navegador diz "conexao recusada".
 echo.
 
-rem ---------- 5. por que nao esta rodando? ----------
 echo   ---------------------------------------------
 echo   Procurando o motivo...
 echo.
@@ -117,7 +109,6 @@ if not errorlevel 1 (
   echo.
 )
 
-rem ---------- 6. sobrou erro no log? ----------
 if exist "dados\servidor.log" (
   echo   ---------------------------------------------
   echo   Ultimas linhas do dados\servidor.log:

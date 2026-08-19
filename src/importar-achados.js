@@ -1,16 +1,3 @@
-// Traz o achados e perdidos do servidor antigo para dentro do gestao.db.
-//
-//   npm run importar-achados -- "C:\\AchadosPerdidos\\achadosperdidos.db"
-//
-// O segundo caminho, opcional, é a pasta de fotos de lá (por padrão a pasta
-// wwwroot\fotos ao lado do banco):
-//
-//   npm run importar-achados -- "C:\\AchadosPerdidos\\achadosperdidos.db" "C:\\AchadosPerdidos\\wwwroot\\fotos"
-//
-// Roda quantas vezes quiser. O que já veio não entra de novo: categoria casa
-// por nome e item casa pelo par tablet + id local, do mesmo jeito que a
-// sincronização do tablet. Rodar duas vezes por engano não duplica nada.
-
 import { DatabaseSync } from "node:sqlite";
 import { existsSync, copyFileSync, readdirSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
@@ -48,8 +35,6 @@ console.log(`
 
 const antigo = new DatabaseSync(caminhoBanco, { readOnly: true });
 
-// O EF Core cria as tabelas com o nome da propriedade do DbSet: Categorias e
-// Itens, com as colunas em PascalCase.
 const temTabela = (nome) => !!antigo.prepare(
   `SELECT 1 FROM sqlite_master WHERE type='table' AND name=?`).get(nome);
 
@@ -59,12 +44,6 @@ if (!temTabela("Categorias") || !temTabela("Itens")) {
   process.exit(1);
 }
 
-// ------------------------------------------------------------
-// categorias
-// ------------------------------------------------------------
-// Guarda o de-para de id antigo -> id daqui. Os itens vêm depois e precisam
-// dele; nunca dá para supor que o id vai ser o mesmo, porque as cinco
-// categorias iniciais já nascem aqui com ids fixos.
 const deParaCategoria = new Map();
 let catsNovas = 0, catsCasadas = 0;
 
@@ -76,7 +55,6 @@ for (const c of antigo.prepare(`SELECT * FROM Categorias ORDER BY Id`).all()) {
   if (jaExiste) {
     deParaCategoria.set(c.Id, jaExiste.id);
     catsCasadas++;
-    // Emoji escolhido lá e ainda em branco aqui: aproveita.
     if (c.Emoji) rodar(`UPDATE ap_categorias SET emoji = COALESCE(emoji, ?) WHERE id = ?`,
                        c.Emoji, jaExiste.id);
     continue;
@@ -96,13 +74,8 @@ for (const c of antigo.prepare(`SELECT * FROM Categorias ORDER BY Id`).all()) {
 
 console.log(`  Categorias: ${catsNovas} novas, ${catsCasadas} que já existiam aqui`);
 
-// ------------------------------------------------------------
-// itens
-// ------------------------------------------------------------
 let novos = 0, repetidos = 0, semCategoria = 0, fotosCopiadas = 0, fotosPerdidas = 0;
 
-// Índice da pasta antiga sem diferenciar maiúscula: o Windows não diferencia e
-// o Linux sim, e o nome gravado no banco nem sempre bate letra por letra.
 const fotosDisponiveis = new Map();
 if (existsSync(pastaFotosAntiga)) {
   for (const nome of readdirSync(pastaFotosAntiga)) {
@@ -114,16 +87,12 @@ for (const i of antigo.prepare(`SELECT * FROM Itens ORDER BY Id`).all()) {
   const categoriaId = deParaCategoria.get(i.CategoriaId);
   if (!categoriaId) { semCategoria++; continue; }
 
-  // Mesma regra de identidade da sincronização: par tablet + id local.
   if (i.IdLocalTablet) {
     const jaVeio = buscar(
       `SELECT id FROM ap_itens WHERE tablet_id IS ? AND id_local_tablet = ?`,
       i.TabletId || null, i.IdLocalTablet);
     if (jaVeio) { repetidos++; continue; }
   } else {
-    // Item cadastrado pelo painel antigo não tem id local. Aí a comparação
-    // possível é descrição + data, que é o suficiente para não duplicar numa
-    // segunda passada do importador.
     const jaVeio = buscar(
       `SELECT id FROM ap_itens WHERE descricao = ? AND data_cadastro = ?`,
       i.Descricao, normalizarData(i.DataCadastro));
@@ -162,13 +131,6 @@ console.log(`
 
 antigo.close();
 
-// ------------------------------------------------------------
-// apoio
-// ------------------------------------------------------------
-
-// Copia a foto para a pasta de dados daqui, mantendo o nome. O nome do servidor
-// antigo já era um GUID sorteado, então não colide com nada e continua batendo
-// com o que o tablet possa ter em cache.
 function copiarFoto(nomeArquivo) {
   if (!nomeArquivo) return null;
   const limpo = basename(String(nomeArquivo));
@@ -183,16 +145,12 @@ function copiarFoto(nomeArquivo) {
   return limpo;
 }
 
-// O .NET grava a data em ISO com fração de segundo e às vezes com Z no fim.
-// Aqui a coluna guarda UTC no formato que o tablet manda e espera de volta.
 function normalizarData(valor) {
   if (!valor) return null;
   const t = String(valor).trim().replace(" ", "T").split(".")[0].replace(/Z$/, "");
   return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(t) ? t : null;
 }
 
-// Declaração de função, não const: é usada lá em cima, na hora de importar os
-// itens, e const no fim do arquivo daria erro de "acessada antes de existir".
 function agora() {
   return new Date().toISOString().slice(0, 19);
 }

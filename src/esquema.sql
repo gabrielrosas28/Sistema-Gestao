@@ -1,14 +1,6 @@
--- ============================================================
--- Banco do sistema Gestão — Colégio Santa Chiara
--- SQLite em modo WAL: vários PCs gravando ao mesmo tempo sem travar.
--- O esquema é ANSI o bastante para migrar para PostgreSQL depois
--- sem reescrever as consultas (ver README, seção "Quando crescer").
--- ============================================================
-
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 
--- ---------- pessoas que usam o sistema ----------
 CREATE TABLE IF NOT EXISTS usuarios (
   id          INTEGER PRIMARY KEY,
   nome        TEXT    NOT NULL,
@@ -26,14 +18,13 @@ CREATE TABLE IF NOT EXISTS sessoes (
   expira_em   TEXT    NOT NULL
 );
 
--- ---------- estrutura da escola ----------
 CREATE TABLE IF NOT EXISTS turmas (
   id          INTEGER PRIMARY KEY,
-  codigo      TEXT    NOT NULL UNIQUE,          -- 2A, M1B, JC...
-  nome        TEXT    NOT NULL,                 -- "2º ano A"
+  codigo      TEXT    NOT NULL UNIQUE,
+  nome        TEXT    NOT NULL,
   segmento    TEXT    NOT NULL CHECK (segmento IN ('infantil','fundamental')),
   professora  TEXT,
-  ordem       INTEGER NOT NULL DEFAULT 0,       -- ordem de exibição
+  ordem       INTEGER NOT NULL DEFAULT 0,
   ano_letivo  INTEGER NOT NULL,
   ativa       INTEGER NOT NULL DEFAULT 1
 );
@@ -50,26 +41,21 @@ CREATE TABLE IF NOT EXISTS alunos (
 );
 CREATE INDEX IF NOT EXISTS idx_alunos_turma ON alunos(turma_id);
 
--- ---------- calendário e eventos ----------
--- Um evento cobre tudo que aparece no calendário: comemoração, passeio,
--- avaliação, reunião, esporte, fardamento. Só cobra quando cobra = 1.
 CREATE TABLE IF NOT EXISTS eventos (
   id          INTEGER PRIMARY KEY,
   nome        TEXT    NOT NULL,
   categoria   TEXT    NOT NULL CHECK (categoria IN
                 ('comemoracao','passeio','avaliacao','reuniao','loja','esporte')),
-  inicio      TEXT    NOT NULL,                 -- AAAA-MM-DD
-  fim         TEXT,                             -- nulo = evento de um dia
+  inicio      TEXT    NOT NULL,
+  fim         TEXT,
   cobra       INTEGER NOT NULL DEFAULT 0,
-  valor       REAL    NOT NULL DEFAULT 0,       -- valor padrão por aluno
+  valor       REAL    NOT NULL DEFAULT 0,
   observacao  TEXT,
   ano_letivo  INTEGER NOT NULL,
   criado_por  INTEGER REFERENCES usuarios(id),
   criado_por_nome TEXT,
   criado_em   TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
   cancelado   INTEGER NOT NULL DEFAULT 0,
-  -- Evento fechado: não aceita mais pagamento nem estorno, sai da tela de
-  -- Pagamentos e vai para Arquivados. Continua no calendário e nos relatórios.
   fechado_em       TEXT,
   fechado_por      INTEGER REFERENCES usuarios(id),
   fechado_por_nome TEXT
@@ -82,20 +68,15 @@ CREATE TABLE IF NOT EXISTS evento_turmas (
   PRIMARY KEY (evento_id, turma_id)
 );
 
--- ---------- períodos do ano letivo ----------
 CREATE TABLE IF NOT EXISTS periodos (
   id          INTEGER PRIMARY KEY,
-  nome        TEXT    NOT NULL,                 -- "2ª unidade", "Férias de julho"
+  nome        TEXT    NOT NULL,
   tipo        TEXT    NOT NULL CHECK (tipo IN ('unidade','recesso','feriado')),
   inicio      TEXT    NOT NULL,
   fim         TEXT    NOT NULL,
   ano_letivo  INTEGER NOT NULL
 );
 
--- ---------- dinheiro ----------
--- Participação = "este aluno entra neste evento, por este valor".
--- isento = vai ao evento mas não paga (bolsista, cortesia, irmão, combinado
--- com a direção). Continua contando como participante e some da cobrança.
 CREATE TABLE IF NOT EXISTS participacoes (
   id             INTEGER PRIMARY KEY,
   evento_id      INTEGER NOT NULL REFERENCES eventos(id) ON DELETE CASCADE,
@@ -109,16 +90,12 @@ CREATE TABLE IF NOT EXISTS participacoes (
 );
 CREATE INDEX IF NOT EXISTS idx_part_evento ON participacoes(evento_id);
 
--- Pagamento nunca é apagado: estorno vira uma marca na linha.
--- Assim o relatório de qualquer data passada continua verdadeiro.
 CREATE TABLE IF NOT EXISTS pagamentos (
   id              INTEGER PRIMARY KEY,
   participacao_id INTEGER NOT NULL REFERENCES participacoes(id) ON DELETE CASCADE,
   valor           REAL    NOT NULL,
   meio            TEXT    NOT NULL CHECK (meio IN ('pix','cartao','dinheiro')),
   recebido_em     TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
-  -- O vínculo fica nulo quando a pessoa é excluída do sistema; o nome ao lado
-  -- guarda quem recebeu, para o relatório de meses atrás continuar verdadeiro.
   lancado_por        INTEGER REFERENCES usuarios(id),
   lancado_por_nome   TEXT,
   estornado_em       TEXT,
@@ -128,7 +105,6 @@ CREATE TABLE IF NOT EXISTS pagamentos (
 );
 CREATE INDEX IF NOT EXISTS idx_pag_participacao ON pagamentos(participacao_id);
 
--- Fechamento de turma: trava o lançamento até alguém reabrir.
 CREATE TABLE IF NOT EXISTS fechamentos (
   id           INTEGER PRIMARY KEY,
   evento_id    INTEGER NOT NULL REFERENCES eventos(id) ON DELETE CASCADE,
@@ -142,8 +118,6 @@ CREATE TABLE IF NOT EXISTS fechamentos (
 );
 CREATE INDEX IF NOT EXISTS idx_fech_evento ON fechamentos(evento_id, turma_id);
 
--- ---------- auditoria ----------
--- Toda ação que mexe em dinheiro entra aqui, com nome e hora.
 CREATE TABLE IF NOT EXISTS registro (
   id          INTEGER PRIMARY KEY,
   usuario_id   INTEGER REFERENCES usuarios(id),
@@ -156,33 +130,20 @@ CREATE TABLE IF NOT EXISTS registro (
 );
 CREATE INDEX IF NOT EXISTS idx_registro_em ON registro(em);
 
--- ---------- histórico de versões ----------
 CREATE TABLE IF NOT EXISTS sistema (
   chave TEXT PRIMARY KEY,
   valor TEXT NOT NULL,
   em    TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
--- ---------- achados e perdidos ----------
--- O tablet da portaria cadastra o que aparece perdido pela escola e sincroniza
--- com estas duas tabelas. Prefixo ap_ para não se misturar com o que é da
--- secretaria: aluno, evento e pagamento continuam sendo outro assunto.
---
--- Antes isto morava num banco próprio (achadosperdidos.db, do servidor .NET).
--- Trazer para cá é o que faz o Backup.bat cobrir também o achados e perdidos.
-
 CREATE TABLE IF NOT EXISTS ap_categorias (
   id              INTEGER PRIMARY KEY,
   nome            TEXT    NOT NULL,
   ativa           INTEGER NOT NULL DEFAULT 1,
   emoji           TEXT,
-  -- UUID que o tablet dá para a categoria criada offline. Serve de ponte até
-  -- ela ganhar um id daqui.
   id_local_tablet TEXT,
   criada_em       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now'))
 );
--- Nome único sem diferenciar maiúscula: o tablet casa categoria por
--- nome.trim().lowercase() no merge (SyncRepository.sincronizarCategorias).
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ap_cat_nome  ON ap_categorias(nome COLLATE NOCASE);
 CREATE INDEX        IF NOT EXISTS idx_ap_cat_local ON ap_categorias(id_local_tablet);
 
@@ -191,12 +152,7 @@ CREATE TABLE IF NOT EXISTS ap_itens (
   descricao         TEXT    NOT NULL,
   local_encontrado  TEXT,
   categoria_id      INTEGER NOT NULL REFERENCES ap_categorias(id),
-  -- 0 encontrado, 1 devolvido, 2 expirado. Número, não texto: é o ordinal do
-  -- enum que o tablet manda e espera de volta.
   status            INTEGER NOT NULL DEFAULT 0,
-  -- Estas duas datas são UTC com T no meio (2026-08-18T13:04:00), diferente do
-  -- resto do banco, que é hora local com espaço. É o formato que o tablet manda
-  -- e espera de volta; converter no meio do caminho só criaria hora errada.
   data_cadastro     TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now')),
   data_devolucao    TEXT,
   nome_arquivo_foto TEXT,
@@ -205,15 +161,11 @@ CREATE TABLE IF NOT EXISTS ap_itens (
   criado_por        INTEGER REFERENCES usuarios(id),
   criado_por_nome   TEXT
 );
--- A identidade de um item que veio do tablet é este par. É ele que faz o
--- reenvio do mesmo lote virar atualização em vez de item repetido.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ap_item_tablet
   ON ap_itens(tablet_id, id_local_tablet) WHERE id_local_tablet IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_ap_item_status ON ap_itens(status);
 CREATE INDEX IF NOT EXISTS idx_ap_item_data   ON ap_itens(data_cadastro);
 
--- Categorias que já vinham prontas no servidor antigo. Os ids são os mesmos
--- de lá, para o tablet que já sincronizou não precisar remapear nada.
 INSERT OR IGNORE INTO ap_categorias (id, nome, ativa, emoji, criada_em) VALUES
   (1, 'Material didático',     1, '📘', '2025-01-01T00:00:00'),
   (2, 'Lancheiras e garrafas', 1, '🎒', '2025-01-01T00:00:00'),
@@ -221,8 +173,6 @@ INSERT OR IGNORE INTO ap_categorias (id, nome, ativa, emoji, criada_em) VALUES
   (4, 'Brinquedos',            1, '🧸', '2025-01-01T00:00:00'),
   (5, 'Xuxinhas',              1, '🎀', '2025-01-01T00:00:00');
 
--- ---------- visões de apoio ----------
--- Recriada a cada partida, para nunca ficar defasada do código.
 DROP VIEW IF EXISTS v_situacao;
 CREATE VIEW v_situacao AS
 SELECT
@@ -238,7 +188,6 @@ SELECT
   p.isento,
   p.motivo_isencao,
   p.valor,
-  -- quanto ainda se espera receber deste aluno
   CASE WHEN p.participa = 1 AND p.isento = 0 THEN p.valor ELSE 0 END AS valor_cobravel,
   pg.id           AS pagamento_id,
   pg.meio,

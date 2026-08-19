@@ -9,12 +9,6 @@ set "PORTA=8080"
 set "SERVICO=%~dp0_servico.cmd"
 set "LOG=%~dp0dados\servidor.log"
 
-rem ---------- precisa de administrador ----------
-rem  Nao dava para confiar so no "net session": ele tambem falha quando o
-rem  servico "Servidor" (LanmanServer) esta desligado, e ai o arquivo acusava
-rem  falta de administrador com o usuario ja elevado. O teste principal agora
-rem  e o nivel de integridade do processo, que nao depende de servico nenhum.
-rem  Sem pipe dentro de if: nesta casa isso ja deu problema.
 set "ADM="
 whoami /groups 2>nul | findstr /c:"S-1-16-12288" >nul
 if not errorlevel 1 set "ADM=1"
@@ -67,20 +61,10 @@ if "%OPCAO%"=="2" goto remover
 if "%OPCAO%"=="3" goto situacao
 if not "%OPCAO%"=="1" exit /b 0
 
-rem =====================================================================
-rem  LIGAR
-rem =====================================================================
-
-rem ---------- a porta ja esta ocupada? ----------
-rem  Se o Gestao.bat estiver aberto, ele ja segura a porta 8080. O servico
-rem  subiria por cima, nao conseguiria a porta e morreria -- e o netstat
-rem  continuaria mostrando alguem escutando, entao eu diria "deu certo"
-rem  olhando para o processo errado. Melhor exigir a porta livre.
 set "OCUPADA="
 for /f "tokens=*" %%l in ('netstat -ano ^| findstr /r /c:":%PORTA% .*LISTENING" 2^>nul') do set "OCUPADA=%%l"
 if defined OCUPADA goto ocupada
 
-rem ---------- onde esta o node ----------
 set "NODE="
 for /f "delims=" %%n in ('where node 2^>nul') do if not defined NODE set "NODE=%%n"
 if not defined NODE (
@@ -108,19 +92,6 @@ if not exist "%~dp0src\servidor.js" (
 
 if not exist "%~dp0dados" mkdir "%~dp0dados"
 
-rem ---------- o lancador ----------
-rem
-rem  Este .cmd existe por um motivo concreto. A versao antiga enfiava o
-rem  comando inteiro dentro do /tr do schtasks, com \" no meio. O schtasks
-rem  le os argumentos pela regra do C, onde a barra invertida escapa a aspa
-rem  seguinte -- e o caminho da pasta ja termina em barra. O \" do fim virava
-rem  barra literal mais fim de aspas, e o schtasks recebia so
-rem  "cmd /c cd /d C:\Gestao\", jogando fora o resto da linha: o node, o
-rem  servidor.js, o log. A tarefa nascia truncada ou nem nascia.
-rem
-rem  Com o comando dentro de um .cmd proprio, o /tr vira um caminho simples
-rem  e nao sobra nada para escapar.
-
 echo   Gravando o lancador...
 > "%SERVICO%" echo @echo off
 >>"%SERVICO%" echo rem Gerado pelo "Rodar sem janela.bat". Nao edite na mao:
@@ -141,7 +112,6 @@ if not exist "%SERVICO%" (
   exit /b 1
 )
 
-rem ---------- registrar no Windows ----------
 schtasks /query /tn "%TAREFA%" >nul 2>nul
 if not errorlevel 1 (
   schtasks /end /tn "%TAREFA%" >nul 2>nul
@@ -159,19 +129,13 @@ if errorlevel 1 (
   exit /b 1
 )
 
-rem ---------- ajustes que o schtasks sozinho nao faz ----------
-rem  Sem isto o Windows mata a tarefa depois de 72 horas, que e o limite
-rem  padrao. O sistema cairia sozinho no meio da semana, sem motivo aparente.
 echo   Ajustando os detalhes (sem limite de 72h, volta sozinho se travar)...
 powershell -NoProfile -Command "$ErrorActionPreference='Stop'; $t=Get-ScheduledTask -TaskName '%TAREFA%'; $t.Settings.ExecutionTimeLimit='PT0S'; $t.Settings.RestartInterval='PT1M'; $t.Settings.RestartCount=3; $t.Settings.DisallowStartIfOnBatteries=$false; $t.Settings.StopIfGoingOnBatteries=$false; $t.Settings.MultipleInstances='IgnoreNew'; Set-ScheduledTask -InputObject $t | Out-Null" 2>nul
 if errorlevel 1 echo   (nao consegui ajustar; a tarefa funciona, mas o Windows pode pausar depois de 72h)
 
-rem ---------- ligar e conferir de verdade ----------
 echo   Ligando...
 schtasks /run /tn "%TAREFA%" >nul 2>nul
 
-rem  Espera ate 20s pelo servidor. Laco com goto, e nao com bloco ( ):
-rem  dentro de bloco o ^| do for /f ja nos pregou peca antes.
 set /a TENTATIVA=0
 
 :esperando
@@ -249,7 +213,6 @@ echo.
 pause
 exit /b 1
 
-rem =====================================================================
 :remover
 schtasks /query /tn "%TAREFA%" >nul 2>nul
 if errorlevel 1 (
@@ -272,7 +235,6 @@ echo.
 pause
 exit /b 0
 
-rem =====================================================================
 :situacao
 schtasks /query /tn "%TAREFA%" >nul 2>nul
 if errorlevel 1 (

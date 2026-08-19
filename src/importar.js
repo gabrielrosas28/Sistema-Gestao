@@ -1,17 +1,3 @@
-// Importa a estrutura da escola para o banco.
-//
-//   npm run importar -- "C:\caminho\Exportado.CSV"        (lista do sistema)
-//   npm run importar -- "C:\caminho\planilha.xlsx"        (gerador de boletins)
-//   npm run importar                                      (procura sozinho)
-//
-// Opções:
-//   --desativar-ausentes   marca como inativo quem está no banco mas não veio
-//                          no arquivo. Sem isso, ninguém é desativado.
-//
-// Roda quantas vezes quiser: atualiza quem já existe, cria quem falta e nunca
-// apaga ninguém. Aluno que mudou de turma é movido, levando junto o histórico
-// de pagamento — ele fica preso à pessoa, não à turma.
-
 import xlsx from "xlsx";
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve, extname } from "node:path";
@@ -21,10 +7,6 @@ import { listar, buscar, rodar, emBloco, ANO_LETIVO } from "./banco.js";
 const aqui = dirname(fileURLToPath(import.meta.url));
 const DESATIVAR_AUSENTES = process.argv.includes("--desativar-ausentes");
 
-// ---------- professoras (quadro de 21/01/2026) ----------
-// O arquivo de alunos não traz professora. Esta lista preenche o que dá;
-// turma que aparecer aqui sem estar na lista fica sem professora, e dá para
-// completar depois pelo sistema.
 const PROFESSORAS = {
   MZA: "Tia Adriana", MZB: "Tia Fabiana",
   M1A: "Tia Ana Paula", M1B: "Tia Tatiane", M1C: "Tia Ana Paula",
@@ -38,9 +20,6 @@ const PROFESSORAS = {
   "5A": "Tia Flávia", "5B": "Tia Patrícia", "5C": "Tia Emanuella", "5D": "Tia Larissa", "5E": "Tia Patrícia"
 };
 
-// ---------- de "CURSO" + "TURMA" para o código do sistema ----------
-// O sistema exporta o curso por extenso ("MATERNAL II", "3º ANO / ENSINO
-// FUNDAMENTAL") e a turma numa coluna separada ("A"). Aqui vira "M2A" e "3A".
 const CURSOS = [
   { teste: /MATERNALZINHO/i,  prefixo: "MZ", nome: "Maternalzinho", segmento: "infantil",    ordem: 0 },
   { teste: /MATERNAL\s*II/i,  prefixo: "M2", nome: "Maternal II",   segmento: "infantil",    ordem: 20 },
@@ -54,7 +33,6 @@ function classificar(curso, turma) {
   const t = String(turma || "").trim().toUpperCase();
   if (!c || !t) return null;
 
-  // "1º ANO / ENSINO FUNDAMENTAL", "5 ANO", "3o ANO"...
   const ano = c.match(/^(\d)\s*[ºo°]?\s*ANO/i);
   if (ano) {
     const n = ano[1];
@@ -65,10 +43,9 @@ function classificar(curso, turma) {
       return { codigo: g.prefixo + t, nome: `${g.nome} ${t}`, segmento: g.segmento, ordem: g.ordem };
     }
   }
-  return null;   // curso desconhecido: o chamador avisa em vez de sumir com o aluno
+  return null;
 }
 
-// ---------- calendário letivo ----------
 const PERIODOS = [
   ["1ª unidade", "unidade", "2026-02-02", "2026-04-30"],
   ["2ª unidade", "unidade", "2026-05-04", "2026-08-21"],
@@ -91,22 +68,15 @@ const PERIODOS = [
   ["Natal", "feriado", "2026-12-25", "2026-12-25"]
 ];
 
-// ============================================================
-// leitura dos arquivos
-// ============================================================
-
-// O sistema da escola exporta em Latin-1, o Excel costuma salvar em UTF-8.
-// Ler com a tabela errada troca "MENDONÇA" por "MENDONÃA".
 function lerTexto(caminho) {
   const bytes = readFileSync(caminho);
   if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF)
     return bytes.subarray(3).toString("utf8");
   const comoUtf8 = bytes.toString("utf8");
-  if (!comoUtf8.includes("\uFFFD")) return comoUtf8;      // UTF-8 válido
+  if (!comoUtf8.includes("\uFFFD")) return comoUtf8;
   return new TextDecoder("latin1").decode(bytes);
 }
 
-// CSV com aspas, ponto e vírgula ou vírgula, quebra de linha do Windows.
 function lerCSV(texto) {
   const delim = (texto.split("\n")[0].match(/;/g) || []).length >=
                 (texto.split("\n")[0].match(/,/g) || []).length ? ";" : ",";
@@ -131,7 +101,6 @@ function lerCSV(texto) {
     .map((l) => Object.fromEntries(cabecalho.map((h, i) => [h, (l[i] ?? "").trim()])));
 }
 
-// Devolve sempre a mesma forma: { matricula, nome, curso, turma, genero }
 function lerArquivo(caminho) {
   if (extname(caminho).toLowerCase() === ".csv") {
     const linhas = lerCSV(lerTexto(caminho));
@@ -149,7 +118,6 @@ function lerArquivo(caminho) {
     }));
   }
 
-  // planilha do gerador de boletins: uma aba por turma, cabeçalho na linha 3
   const wb = xlsx.readFile(caminho);
   const alunos = [];
   for (const aba of wb.SheetNames) {
@@ -177,9 +145,6 @@ function procurarArquivo() {
   return candidatos.find(existsSync) || null;
 }
 
-// ============================================================
-// importação
-// ============================================================
 function importar() {
   const arg = process.argv.slice(2).find((a) => !a.startsWith("--"));
   const caminho = arg ? resolve(arg) : procurarArquivo();
@@ -187,7 +152,6 @@ function importar() {
   console.log("\n  Importando a estrutura da escola");
   console.log("  ─────────────────────────────────────────────");
 
-  // ---- calendário ----
   let novosPeriodos = 0;
   for (const [nome, tipo, inicio, fim] of PERIODOS) {
     const existe = buscar(`SELECT id FROM periodos WHERE nome = ? AND ano_letivo = ?`, nome, ANO_LETIVO);
@@ -207,7 +171,6 @@ function importar() {
   const linhas = lerArquivo(caminho);
   console.log(`  Leu ${linhas.length} linhas`);
 
-  // ---- turmas que aparecem no arquivo ----
   const turmasDoArquivo = new Map();
   const cursosDesconhecidos = new Map();
   const semTurma = [];
@@ -220,13 +183,10 @@ function importar() {
       cursosDesconhecidos.set(chave, (cursosDesconhecidos.get(chave) || 0) + 1);
       continue;
     }
-    // Todos os alunos da turma precisam apontar para o MESMO objeto: é nele
-    // que o id do banco é gravado logo abaixo.
     if (!turmasDoArquivo.has(t.codigo)) turmasDoArquivo.set(t.codigo, t);
     l._turma = turmasDoArquivo.get(t.codigo);
   }
 
-  // ---- grava as turmas ----
   let turmasNovas = [];
   for (const [codigo, t] of [...turmasDoArquivo].sort((a, b) => a[1].ordem - b[1].ordem || a[0].localeCompare(b[0]))) {
     const existe = buscar(`SELECT id, professora FROM turmas WHERE codigo = ? AND ano_letivo = ?`, codigo, ANO_LETIVO);
@@ -244,7 +204,6 @@ function importar() {
     }
   }
 
-  // ---- alunos ----
   let criados = 0, atualizados = 0, mudaram = [];
   const vistos = new Set();
 
@@ -252,7 +211,6 @@ function importar() {
     if (!l._turma) continue;
     const turmaId = l._turma.id;
 
-    // A matrícula é o número da pessoa, não da turma: procura em toda a escola.
     const existe = buscar(
       `SELECT a.*, t.nome AS turma_nome FROM alunos a JOIN turmas t ON t.id = a.turma_id
         WHERE a.matricula = ? AND t.ano_letivo = ?`, l.matricula, ANO_LETIVO);
@@ -261,7 +219,6 @@ function importar() {
       if (existe.turma_id !== turmaId) {
         mudaram.push({ nome: l.nome, de: existe.turma_nome, para: l._turma.nome });
       }
-      // Gênero só vem da planilha de boletins. Não apaga o que já existe.
       if (l.genero) rodar(`UPDATE alunos SET genero = ? WHERE id = ?`, l.genero, existe.id);
       rodar(`UPDATE alunos SET nome = ?, turma_id = ?, ativo = 1 WHERE id = ?`, l.nome, turmaId, existe.id);
       vistos.add(existe.id);
@@ -274,7 +231,6 @@ function importar() {
     }
   }
 
-  // ---- quem está no banco e não veio no arquivo ----
   const ausentes = listar(
     `SELECT a.id, a.matricula, a.nome, t.nome AS turma
        FROM alunos a JOIN turmas t ON t.id = a.turma_id
@@ -286,7 +242,6 @@ function importar() {
     for (const a of ausentes) { rodar(`UPDATE alunos SET ativo = 0 WHERE id = ?`, a.id); desativados++; }
   }
 
-  // ---- turmas vazias que não vieram no arquivo ----
   const vazias = listar(
     `SELECT t.id, t.codigo, t.nome FROM turmas t
       WHERE t.ativa = 1 AND t.ano_letivo = ?
@@ -294,9 +249,6 @@ function importar() {
       ORDER BY t.ordem`, ANO_LETIVO);
   for (const t of vazias) rodar(`UPDATE turmas SET ativa = 0 WHERE id = ?`, t.id);
 
-  // ============================================================
-  // relatório
-  // ============================================================
   const total = buscar(`SELECT COUNT(*) AS n FROM alunos WHERE ativo = 1`).n;
   const nTurmas = buscar(`SELECT COUNT(*) AS n FROM turmas WHERE ativa = 1 AND ano_letivo = ?`, ANO_LETIVO).n;
 

@@ -7,9 +7,6 @@ cd /d "%~dp0"
 set "REGRA=Gestao Santa Chiara"
 set "PORTA=8080"
 
-rem  O "net session" sozinho nao serve: ele tambem falha quando o servico
-rem  "Servidor" do Windows esta desligado, acusando falta de administrador
-rem  com o usuario ja elevado. Confere pelo nivel de integridade do processo.
 set "ADM="
 whoami /groups 2>nul | findstr /c:"S-1-16-12288" >nul
 if not errorlevel 1 set "ADM=1"

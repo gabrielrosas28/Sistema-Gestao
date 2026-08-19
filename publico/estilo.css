@@ -1,10 +1,9 @@
 :root{
-  /* cores extraídas da marca do Colégio Santa Chiara */
-  --azul-tinta:#26285F;   /* índigo escuro — navegação */
+  --azul-tinta:#26285F;
   --azul-tinta-2:#1B1D45;
-  --azul:#3E4095;         /* azul da marca — ações */
+  --azul:#3E4095;
   --azul-claro:#E4E7F8;
-  --ceu:#A0DDF8;          /* azul do globo */
+  --ceu:#A0DDF8;
   --ceu-fundo:#E9F7FE;
   --amarelo:#FDB92E;
   --amarelo-fundo:#FFF4DE;
@@ -31,7 +30,6 @@ input,select{font:inherit;color:inherit}
 
 .app{display:grid;grid-template-columns:238px 1fr;min-height:100vh}
 
-/* ---------- navegação ---------- */
 .nav{background:var(--azul-tinta);color:#fff;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
 .nav__marca{display:flex;align-items:center;gap:11px;padding:18px 18px 22px}
 .nav__logo{width:40px;height:40px;border-radius:50%;background:#fff;flex:none;object-fit:contain;padding:1px;display:block}
@@ -46,7 +44,6 @@ input,select{font:inherit;color:inherit}
 .nav__servidor{display:flex;align-items:center;gap:7px}
 .ponto{width:7px;height:7px;border-radius:50%;background:#5FD6A4;flex:none;box-shadow:0 0 0 3px rgba(95,214,164,.22)}
 
-/* ---------- área principal ---------- */
 .principal{display:flex;flex-direction:column;min-width:0}
 .topo{background:var(--branco);border-bottom:1px solid var(--cinza-linha);padding:15px 30px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;position:sticky;top:0;z-index:20}
 .topo__texto{flex:1;min-width:200px}
@@ -57,7 +54,6 @@ input,select{font:inherit;color:inherit}
 .topo__acoes{display:flex;gap:8px;flex-wrap:wrap}
 .conteudo{padding:26px 30px 100px;max-width:1200px;width:100%}
 
-/* ---------- botões ---------- */
 .btn{display:inline-flex;align-items:center;gap:8px;justify-content:center;padding:9px 16px;border-radius:8px;font-weight:600;font-size:14px;transition:background .12s,box-shadow .12s,transform .08s}
 .btn:active{transform:translateY(1px)}
 .btn--primario{background:var(--azul);color:#fff;box-shadow:0 1px 2px rgba(62,64,149,.4)}
@@ -66,7 +62,6 @@ input,select{font:inherit;color:inherit}
 .btn--fantasma:hover{background:#F8F9FE}
 .btn svg{width:16px;height:16px;stroke-width:2.2}
 
-/* ---------- fichas ---------- */
 .fichas{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:30px}
 .ficha{background:var(--branco);border-radius:12px;padding:16px 18px;box-shadow:var(--sombra);border-top:3px solid var(--azul-claro)}
 .ficha--destaque{border-top-color:var(--amarelo)}
@@ -84,7 +79,6 @@ input,select{font:inherit;color:inherit}
 .grupo-titulo::after{content:"";flex:1;height:1px;background:var(--cinza-linha)}
 .grupo-titulo:first-child{margin-top:0}
 
-/* ---------- eventos ---------- */
 .eventos{display:flex;flex-direction:column;gap:9px}
 .evento{display:grid;grid-template-columns:1fr 190px 132px 22px;align-items:center;gap:20px;background:var(--branco);border-radius:12px;padding:15px 18px;box-shadow:var(--sombra);text-align:left;width:100%;transition:box-shadow .14s,transform .14s}
 .evento:hover{box-shadow:var(--sombra-alta);transform:translateY(-1px)}
@@ -100,7 +94,6 @@ input,select{font:inherit;color:inherit}
 .dinheiro{font-family:var(--mono);font-weight:600;font-size:15px;text-align:right;letter-spacing:-.02em}
 .dinheiro small{display:block;font-family:var(--corpo);font-size:11.5px;color:var(--cinza);font-weight:500;letter-spacing:0}
 
-/* ---------- turmas ---------- */
 .turmas{display:grid;grid-template-columns:repeat(auto-fill,minmax(212px,1fr));gap:12px}
 .turma{background:var(--branco);border-radius:12px;padding:15px 16px;text-align:left;box-shadow:var(--sombra);transition:box-shadow .14s,transform .14s}
 .turma:hover{box-shadow:var(--sombra-alta);transform:translateY(-1px)}
@@ -110,7 +103,6 @@ input,select{font:inherit;color:inherit}
 .turma__estado--ok{color:var(--azul)}
 .turma__estado--pend{color:var(--ambar)}
 
-/* ---------- filtros ---------- */
 .filtros{display:flex;gap:9px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
 .busca{position:relative;flex:1;min-width:190px;max-width:290px}
 .busca input{width:100%;padding:8px 12px 8px 34px;border-radius:8px;border:1px solid var(--cinza-linha);background:var(--branco)}
@@ -120,7 +112,6 @@ input,select{font:inherit;color:inherit}
 .chip[aria-pressed="true"]{background:var(--azul-tinta);color:#fff;box-shadow:none}
 .chip span{font-family:var(--mono);font-size:12px;opacity:.75;margin-left:3px}
 
-/* ---------- CANHOTO ---------- */
 .canhotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(312px,1fr));gap:14px}
 .canhoto{position:relative;display:grid;grid-template-columns:38px 1fr;background:var(--branco);border-radius:11px;box-shadow:var(--sombra);overflow:hidden;transition:box-shadow .15s,opacity .15s}
 .canhoto:hover{box-shadow:var(--sombra-alta)}
@@ -148,7 +139,6 @@ input,select{font:inherit;color:inherit}
 .acoes{display:flex;gap:8px}
 .acoes .btn{flex:1;padding:8px 12px}
 
-/* carimbo PAGO — elemento-assinatura */
 .carimbo{position:absolute;right:14px;bottom:12px;font-family:var(--display);font-weight:800;font-size:21px;letter-spacing:.06em;color:var(--azul);border:3px double var(--azul);border-radius:7px;padding:3px 11px 4px;transform:rotate(-9deg);opacity:.82;pointer-events:none;line-height:1.1;text-align:center}
 .carimbo small{display:block;font-family:var(--mono);font-size:9px;letter-spacing:.04em;font-weight:500;opacity:.9}
 @keyframes bater{0%{transform:rotate(-9deg) scale(2.6);opacity:0}55%{opacity:.95}70%{transform:rotate(-9deg) scale(.94)}100%{transform:rotate(-9deg) scale(1);opacity:.82}}
@@ -161,7 +151,6 @@ input,select{font:inherit;color:inherit}
 .canhoto--fora .canhoto__talao{background:#EEF0F6}
 .canhoto--fora .canhoto__matricula{color:var(--cinza)}
 
-/* ---------- barra de totais ---------- */
 .totais{position:fixed;left:238px;right:0;bottom:0;z-index:30;background:var(--azul-tinta);color:#fff;padding:12px 30px;display:flex;align-items:center;gap:26px;flex-wrap:wrap}
 .totais__item{font-size:13px;color:#B4BAE6}
 .totais__item b{display:block;font-family:var(--mono);font-size:17px;color:#fff;font-weight:600;letter-spacing:-.02em}
@@ -171,7 +160,6 @@ input,select{font:inherit;color:inherit}
 .totais .btn--amarelo{background:var(--amarelo);color:var(--azul-tinta-2)}
 .totais .btn--amarelo:hover{background:#EDAA1C}
 
-/* ---------- modal ---------- */
 .cortina{position:fixed;inset:0;background:rgba(27,29,69,.55);display:grid;place-items:center;z-index:60;padding:20px;overflow:auto}
 .cortina[hidden]{display:none}
 .modal{background:var(--branco);border-radius:14px;width:100%;max-width:500px;box-shadow:0 30px 60px -20px rgba(27,29,69,.6);overflow:hidden;margin:auto}
@@ -201,13 +189,11 @@ input,select{font:inherit;color:inherit}
 .vazio h3{font-family:var(--display);font-size:17px;margin:0 0 5px}
 .vazio p{color:var(--cinza);margin:0 0 16px;font-size:14px}
 
-/* ---------- aviso ---------- */
 .aviso{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);background:var(--azul-tinta);color:#fff;padding:11px 18px;border-radius:9px;font-size:14px;font-weight:600;z-index:80;box-shadow:0 16px 32px -12px rgba(27,29,69,.7)}
 .aviso[hidden]{display:none}
 
 [hidden]{display:none !important}
 
-/* ---------- relatório para impressão ---------- */
 #relatorio{display:none}
 @media print{
   @page{size:A4 portrait;margin:14mm}
@@ -245,7 +231,6 @@ input,select{font:inherit;color:inherit}
   .quebra{page-break-before:always}
 }
 
-/* ---------- turma fechada ---------- */
 .fechado{display:flex;align-items:center;gap:13px;background:var(--azul-tinta);color:#fff;border-radius:11px;padding:13px 17px;margin-bottom:18px}
 .fechado__texto{flex:1;font-size:13.5px;color:#C3C8EC}
 .fechado__texto b{display:block;font-family:var(--display);font-size:15.5px;color:#fff;font-weight:700;letter-spacing:-.01em}
@@ -253,7 +238,6 @@ input,select{font:inherit;color:inherit}
 .canhoto--travado .acoes,.canhoto--travado .meios{pointer-events:none;opacity:.55}
 .canhoto--travado .valor-entrada{background:#F4F5FA;color:var(--cinza)}
 
-/* ---------- calendário ---------- */
 .cal__barra{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
 .cal__mes{font-family:var(--display);font-size:21px;font-weight:700;letter-spacing:-.025em;min-width:172px}
 .cal__nav{display:flex;gap:4px}
@@ -296,7 +280,6 @@ input,select{font:inherit;color:inherit}
 .agenda__meta{font-size:12.5px;color:var(--cinza)}
 .etiqueta{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:3px 8px;border-radius:5px;white-space:nowrap}
 
-/* ---------- responsivo ---------- */
 @media (max-width:900px){
   .app{grid-template-columns:1fr}
   .nav{position:fixed;bottom:0;top:auto;height:auto;width:100%;flex-direction:row;z-index:50;padding:0}
@@ -317,9 +300,6 @@ input,select{font:inherit;color:inherit}
 @media (max-width:560px){.fichas{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms !important;transition-duration:.01ms !important}}
 
-/* ============================================================
-   telas de entrada e estados de carregamento
-   ============================================================ */
 .entrada{min-height:100vh;display:grid;place-items:center;padding:24px;background:var(--papel)}
 .entrada__caixa{background:var(--branco);border-radius:16px;box-shadow:0 24px 48px -24px rgba(38,40,95,.45);width:100%;max-width:390px;overflow:hidden}
 .entrada__topo{background:var(--azul-tinta);padding:26px 28px 22px;display:flex;align-items:center;gap:14px}
@@ -345,9 +325,6 @@ input,select{font:inherit;color:inherit}
 .somente-coord{display:none}
 body[data-papel="coordenacao"] .somente-coord{display:inline-flex}
 
-/* ============================================================
-   isenção — participa do evento, mas não paga
-   ============================================================ */
 .selo--isento{background:var(--amarelo-fundo);color:var(--ambar)}
 .canhoto--isento{background:linear-gradient(90deg,var(--cinza) 0 4px,var(--branco) 4px)}
 .canhoto--isento .canhoto__talao{background:#EFF1F6}
@@ -362,9 +339,6 @@ body[data-papel="coordenacao"] .somente-coord{display:inline-flex}
   .rel__nota{color:#777;font-size:9px}
 }
 
-/* ============================================================
-   ajustes e edição do calendário
-   ============================================================ */
 .evento--pessoa{grid-template-columns:1fr auto 90px 22px}
 .evento--periodo{grid-template-columns:1fr 22px}
 .evento--inativo{opacity:.55}
@@ -390,18 +364,11 @@ body[data-papel="coordenacao"] .agenda__editar{display:grid}
   .agenda__abrir{grid-column:1/-1}
 }
 
-/* ============================================================
-   achados e perdidos
-   ============================================================ */
-/* A foto manda aqui. Quem procura uma mochila reconhece a mochila antes de ler
-   qualquer coisa — então o cartão é a imagem, e o texto vem depois. */
 .achados{display:grid;grid-template-columns:repeat(auto-fill,minmax(214px,1fr));gap:14px}
 .achado{background:var(--branco);border-radius:12px;box-shadow:var(--sombra);overflow:hidden;text-align:left;width:100%;display:flex;flex-direction:column;transition:box-shadow .14s,transform .14s}
 .achado:hover{box-shadow:var(--sombra-alta);transform:translateY(-2px)}
 .achado__foto{position:relative;aspect-ratio:4/3;background:var(--azul-claro);overflow:hidden;flex:none}
 .achado__foto img{width:100%;height:100%;object-fit:cover;display:block}
-/* Sem foto o cartão não pode virar um buraco cinza: o emoji da categoria
-   ocupa o lugar e ainda diz do que se trata. */
 .achado__semfoto{width:100%;height:100%;display:grid;place-items:center;font-size:44px;background:
   radial-gradient(circle at 30% 25%,#fff 0,var(--azul-claro) 70%)}
 .achado__emoji{position:absolute;left:9px;top:9px;width:31px;height:31px;border-radius:9px;background:rgba(255,255,255,.94);display:grid;place-items:center;font-size:17px;box-shadow:0 2px 6px rgba(38,40,95,.22)}
@@ -413,8 +380,6 @@ body[data-papel="coordenacao"] .agenda__editar{display:grid}
 .achado__tempo{font-family:var(--mono);font-size:11px;color:var(--cinza);letter-spacing:-.02em;white-space:nowrap}
 .achado--devolvido{opacity:.62}
 .achado--devolvido .achado__foto img{filter:grayscale(1)}
-/* Passou do tempo e ninguém veio buscar: amarelo de atenção, não vermelho de
-   erro — não é erro de ninguém, é só hora de dar um destino. */
 .achado--velho .achado__foto::after{content:"";position:absolute;inset:0;box-shadow:inset 0 -3px 0 var(--amarelo)}
 
 .situacao{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:6px;white-space:nowrap}
@@ -422,7 +387,6 @@ body[data-papel="coordenacao"] .agenda__editar{display:grid}
 .situacao--devolvido{background:var(--ceu-fundo);color:var(--azul)}
 .situacao--expirado{background:#EEF0F6;color:var(--cinza)}
 
-/* categorias */
 .categorias{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:11px}
 .categoria{background:var(--branco);border-radius:11px;padding:13px 15px;box-shadow:var(--sombra);display:flex;align-items:center;gap:12px;text-align:left;width:100%;transition:box-shadow .14s,transform .14s}
 .categoria:hover{box-shadow:var(--sombra-alta);transform:translateY(-1px)}
@@ -431,18 +395,11 @@ body[data-papel="coordenacao"] .agenda__editar{display:grid}
 .categoria__nota{display:block;font-size:12px;color:var(--cinza);margin-top:2px}
 .categoria--inativa{opacity:.55}
 
-/* foto no modal de cadastro */
-/* A área é um <label>, e dentro de .form-campo todo label vira etiqueta em
-   CAIXA ALTA. Aqui isso não serve: é frase, não rótulo. */
-/* .form-campo label vence .foto-area no desempate do CSS, então a regra
-   precisa citar os dois — senão a frase continua saindo em CAIXA ALTA. */
 .form-campo .foto-area{display:block;position:relative;border-radius:11px;overflow:hidden;background:var(--papel);
   box-shadow:inset 0 0 0 2px var(--cinza-linha);cursor:pointer;transition:box-shadow .12s;
   text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--cinza)}
 .foto-area:hover{box-shadow:inset 0 0 0 2px var(--azul)}
 .foto-area img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}
-/* Vazia ela é uma faixa curta: o modal já tem descrição, lugar e categoria para
-   mostrar, e uma moldura de foto ocupando meia tela empurrava tudo para baixo. */
 .foto-area__vazio{display:flex;align-items:center;gap:12px;padding:16px 18px;text-align:left;line-height:1.35}
 .foto-area__vazio svg{width:26px;height:26px;stroke-width:1.6;color:var(--azul);flex:none}
 
@@ -451,18 +408,15 @@ body[data-papel="coordenacao"] .agenda__editar{display:grid}
 .emoji-botao:hover{background:var(--azul-claro)}
 .emoji-botao[aria-pressed="true"]{background:var(--ceu-fundo);box-shadow:inset 0 0 0 2px var(--azul)}
 
-/* detalhe do achado */
 .item-foto{width:100%;border-radius:11px;display:block;background:var(--papel)}
 .item-linha{display:flex;justify-content:space-between;gap:14px;font-size:13.5px;padding:7px 0;border-bottom:1px solid var(--cinza-linha)}
 .item-linha:last-child{border-bottom:none}
 .item-linha span:first-child{color:var(--cinza);font-weight:600;font-size:12px;letter-spacing:.05em;text-transform:uppercase}
 .item-linha span:last-child{text-align:right}
 
-/* a chave do tablet */
 .chave{font-family:var(--mono);font-size:13px;background:var(--papel);border-radius:9px;padding:12px 14px;
   word-break:break-all;line-height:1.6;box-shadow:inset 0 0 0 1px var(--cinza-linha);user-select:all}
 
-/* ---------- evento arquivado ---------- */
 .arquivado{display:flex;align-items:center;gap:13px;background:var(--papel);border-radius:11px;padding:13px 17px;
   margin-bottom:18px;box-shadow:inset 0 0 0 1px var(--cinza-linha)}
 .arquivado__texto{flex:1;font-size:13.5px;color:var(--cinza)}
@@ -473,9 +427,6 @@ body[data-papel="coordenacao"] .agenda__editar{display:grid}
   .achados{grid-template-columns:repeat(auto-fill,minmax(154px,1fr))}
 }
 
-/* Turma que já recebeu pagamento: fica no evento e não sai daqui. O cadeado é
-   informação, não decoração — sem ele a pessoa clica, nada acontece e ela acha
-   que a tela travou. */
 .turma-chip--travada{box-shadow:inset 0 0 0 1px var(--cinza-linha);cursor:not-allowed}
 .turma-chip--travada[aria-pressed="true"]{background:var(--azul-tinta);color:#fff;opacity:.9}
 .recado--calmo{background:var(--amarelo-fundo);color:var(--ambar);font-weight:500}

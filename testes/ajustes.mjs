@@ -1,4 +1,3 @@
-// Edicao de evento, calendario letivo e cadastro de pessoas.
 const B = process.env.ALVO || "http://127.0.0.1:8099";
 let cookie = "", falhas = 0;
 
@@ -25,7 +24,6 @@ const t2A = turmas.find(t => t.codigo === "2A");
 const t2B = turmas.find(t => t.codigo === "2B");
 const t2C = turmas.find(t => t.codigo === "2C");
 
-// ---------- editar evento ----------
 let r = await req("POST", "/api/eventos", {
   nome: "Passeio ao museu", categoria: "passeio", inicio: "2026-11-10",
   cobra: true, valor: 60, turmas: [t2A.id, t2B.id]
@@ -43,7 +41,6 @@ r = await req("PUT", `/api/eventos/${ev}`, {
 });
 ok("fim antes do inicio e recusado na edicao", r.status === 400, r.dados?.erro);
 
-// turma nova entra com os alunos ja prontos
 r = await req("PUT", `/api/eventos/${ev}`, {
   nome: "Passeio ao museu de arte", inicio: "2026-11-17", valor: 60,
   turmas: [t2A.id, t2B.id, t2C.id]
@@ -52,13 +49,11 @@ ok("turma nova entra no evento", r.dados.entraram === 1);
 r = await req("GET", `/api/eventos/${ev}/turmas/${t2C.id}`);
 ok("turma nova ja vem com os alunos", r.dados.alunos.length === t2C.alunos, r.dados.alunos.length + " alunos");
 
-// tirar turma sem pagamento pode
 r = await req("PUT", `/api/eventos/${ev}`, {
   nome: "Passeio ao museu de arte", inicio: "2026-11-17", valor: 60, turmas: [t2A.id, t2B.id]
 });
 ok("turma sem pagamento pode sair", r.dados.sairam === 1);
 
-// trocar o valor so mexe em quem nao pagou
 const alunos2A = (await req("GET", `/api/eventos/${ev}/turmas/${t2A.id}`)).dados.alunos;
 await req("POST", "/api/pagamentos", { participacao_id: alunos2A[0].participacao_id, valor: 60, meio: "pix" });
 r = await req("PUT", `/api/eventos/${ev}`, {
@@ -72,13 +67,11 @@ ok("quem ja pagou mantem o valor antigo",
 ok("quem nao pagou ficou com o valor novo",
    depois.filter(a => a.situacao === "pendente").every(a => a.valor === 75), "R$ 75");
 
-// turma com pagamento nao pode sair
 r = await req("PUT", `/api/eventos/${ev}`, {
   nome: "Passeio ao museu de arte", inicio: "2026-11-17", valor: 75, turmas: [t2B.id]
 });
 ok("turma com pagamento nao pode sair do evento", r.status === 409, r.dados?.erro?.slice(0, 60));
 
-// cancelar evento
 r = await req("DELETE", `/api/eventos/${ev}`);
 ok("nao cancela evento com pagamento lancado", r.status === 409, r.dados?.erro?.slice(0, 50));
 
@@ -90,7 +83,6 @@ ok("evento sem pagamento pode ser cancelado", r.status === 200);
 r = await req("GET", "/api/calendario?mes=2026-11");
 ok("cancelado some do calendario", !r.dados.eventos.some(e => e.id === evCancel));
 
-// ---------- calendario letivo ----------
 console.log("\n  Calendario letivo\n  ---------------------------------------------");
 r = await req("POST", "/api/periodos", { nome: "Semana de provas", tipo: "unidade",
   inicio: "2026-11-23", fim: "2026-11-27" });
@@ -118,7 +110,6 @@ ok("periodo apagado", r.status === 200);
 r = await req("DELETE", `/api/periodos/${per}`);
 ok("apagar duas vezes devolve 404", r.status === 404);
 
-// ---------- pessoas ----------
 console.log("\n  Cadastro de pessoas\n  ---------------------------------------------");
 r = await req("POST", "/api/usuarios", { nome: "Ana Secretaria", email: "ana@santachiara.com.br",
   senha: "senhaforte1", papel: "secretaria" });
@@ -138,14 +129,12 @@ ok("secretaria promovida a coordenacao", r.status === 200 && r.dados.papel === "
 r = await req("PUT", `/api/usuarios/${ana}`, { ativo: false });
 ok("acesso pode ser tirado", r.status === 200 && r.dados.ativo === 0);
 
-// a ultima coordenacao ativa nao pode se trancar do lado de fora
 const eu = (await req("GET", "/api/eu")).dados;
 r = await req("PUT", `/api/usuarios/${eu.id}`, { papel: "secretaria" });
 ok("ultima coordenacao nao pode se rebaixar", r.status === 409, r.dados?.erro);
 r = await req("PUT", `/api/usuarios/${eu.id}`, { ativo: false });
 ok("ultima coordenacao nao pode tirar o proprio acesso", r.status === 409);
 
-// senha nova derruba a sessao antiga e passa a valer
 r = await req("PUT", `/api/usuarios/${ana}`, { ativo: true, senha: "outrasenha9" });
 ok("senha trocada pela coordenacao", r.status === 200);
 const guardado = cookie;
@@ -155,7 +144,6 @@ ok("senha antiga para de funcionar", r.status === 401);
 r = await req("POST", "/api/sessao", { email: "ana@santachiara.com.br", senha: "outrasenha9" });
 ok("senha nova funciona", r.status === 200);
 
-// secretaria nao mexe em ajustes
 r = await req("POST", "/api/usuarios", { nome: "C", email: "c@x.com", senha: "senhaforte1" });
 ok("coordenacao promovida consegue cadastrar", r.status === 201);
 cookie = guardado;

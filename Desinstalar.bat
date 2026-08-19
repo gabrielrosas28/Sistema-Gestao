@@ -9,10 +9,6 @@ set "REGRA=Gestao Santa Chiara"
 set "PASTA=%~dp0"
 set "BACKUPS=%USERPROFILE%\OneDrive\Backups Gestao"
 
-rem ---------- precisa de administrador ----------
-rem  O "net session" sozinho nao serve: ele tambem falha quando o servico
-rem  "Servidor" do Windows esta desligado, acusando falta de administrador
-rem  com o usuario ja elevado. Confere pelo nivel de integridade do processo.
 set "ADM="
 whoami /groups 2>nul | findstr /c:"S-1-16-12288" >nul
 if not errorlevel 1 set "ADM=1"
@@ -68,7 +64,6 @@ echo.
 echo   =============================================
 echo.
 
-rem ---------- 1. tirar do ar ----------
 echo   [1/6] Tirando o sistema do ar...
 schtasks /query /tn "%TAREFA%" >nul 2>nul
 if not errorlevel 1 (
@@ -79,7 +74,6 @@ if not errorlevel 1 (
   echo         nao havia tarefa registrada.
 )
 
-rem mata qualquer node que esteja segurando o banco ou a porta
 tasklist /fi "imagename eq node.exe" | find /i "node.exe" >nul
 if not errorlevel 1 (
   taskkill /im node.exe /f >nul 2>nul
@@ -87,7 +81,6 @@ if not errorlevel 1 (
 )
 timeout /t 2 >nul
 
-rem ---------- 2. firewall ----------
 echo   [2/6] Fechando a porta no firewall...
 netsh advfirewall firewall show rule name="%REGRA%" >nul 2>nul
 if not errorlevel 1 (
@@ -97,7 +90,6 @@ if not errorlevel 1 (
   echo         nao havia regra de firewall.
 )
 
-rem ---------- 3. backup agendado, se alguem criou ----------
 echo   [3/6] Conferindo agendamento de backup...
 schtasks /query /tn "Backup Gestao" >nul 2>nul
 if not errorlevel 1 (
@@ -107,7 +99,6 @@ if not errorlevel 1 (
   echo         nao havia backup agendado.
 )
 
-rem ---------- 4. banco ----------
 echo   [4/6] Apagando o banco de dados...
 if exist "%PASTA%dados" (
   rd /s /q "%PASTA%dados" 2>nul
@@ -121,7 +112,6 @@ if exist "%PASTA%dados" (
   echo         nao havia pasta dados.
 )
 
-rem ---------- 5. backups ----------
 echo   [5/6] Apagando os backups...
 if exist "%BACKUPS%" (
   rd /s /q "%BACKUPS%" 2>nul
@@ -138,13 +128,9 @@ echo.
 echo         Atencao: se o OneDrive ja sincronizou, a copia pode continuar
 echo         na Lixeira do OneDrive na internet. Esvazie por la tambem.
 
-rem ---------- 6. a propria pasta ----------
 echo   [6/6] Apagando a pasta do sistema...
 echo.
 
-rem O .bat nao consegue apagar a pasta onde ele mesmo esta rodando.
-rem Por isso ele grava um faxineiro no TEMP, sai da pasta e chama o faxineiro,
-rem que espera este arquivo terminar e so entao apaga tudo.
 set "FAXINA=%TEMP%\gestao-faxina.bat"
 > "%FAXINA%" echo @echo off
 >>"%FAXINA%" echo chcp 65001 ^>nul
